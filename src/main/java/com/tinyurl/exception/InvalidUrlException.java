@@ -1,7 +1,6 @@
 package com.tinyurl.exception;
 
 import com.tinyurl.dto.ApiError;
-import jakarta.persistence.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
