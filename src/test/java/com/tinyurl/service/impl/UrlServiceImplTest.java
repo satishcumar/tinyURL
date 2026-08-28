@@ -11,6 +11,9 @@ import com.tinyurl.exception.UrlNotFoundException;
 import com.tinyurl.util.ShortCodeGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -100,6 +103,48 @@ class UrlServiceImplTest {
         assertEquals("free002", response.shortCode());
         verify(shortCodeGenerator, times(2)).generate();
         verify(repository, times(2)).saveAndFlush(any(UrlMapping.class));
+    }
+
+    @Test
+    void createShortUrlStopsAfterFiveConcurrentInsertConflicts() {
+        when(shortCodeGenerator.generate()).thenReturn("race001");
+        when(repository.existsByShortCode("race001")).thenReturn(false);
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(repository.saveAndFlush(any(UrlMapping.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate short code"));
+
+        assertThrows(
+                ShortCodeGenerationException.class,
+                () -> service.createShortUrl("https://example.com"));
+
+        verify(shortCodeGenerator, times(5)).generate();
+        verify(repository, times(5)).saveAndFlush(any(UrlMapping.class));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "ftp://example.com/file", "not-a-url", "https://exa mple.com", "/relative/path"})
+    void createShortUrlRejectsInvalidValues(String value) {
+        assertThrows(InvalidUrlException.class, () -> service.createShortUrl(value));
+        verifyNoInteractions(shortCodeGenerator, repository);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://example.com",
+            "HTTPS://example.com/path",
+            "https://example.com:8443/path?item=1"
+    })
+    void createShortUrlAcceptsSupportedHttpUrls(String value) {
+        when(shortCodeGenerator.generate()).thenReturn("abc1234");
+        when(repository.existsByShortCode("abc1234")).thenReturn(false);
+        when(repository.saveAndFlush(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(properties.getBaseUrl()).thenReturn("http://localhost:8080");
+
+        CreateUrlResponse response = service.createShortUrl(value);
+
+        assertEquals(value, response.originalUrl());
     }
 
     @Test

@@ -88,6 +88,29 @@ class TinyURLControllerTest {
     }
 
     @Test
+    void createReturns400WhenUrlExceedsMaximumLength() throws Exception {
+        String oversizedUrl = "https://example.com/" + "a".repeat(2048);
+
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"" + oversizedUrl + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("url must be at most 2048 characters"));
+    }
+
+    @Test
+    void unexpectedFailureReturnsGeneric500WithoutInternalDetails() throws Exception {
+        when(urlService.getAnalytics("abc1234"))
+                .thenThrow(new IllegalStateException("sensitive internal detail"));
+
+        mockMvc.perform(get("/api/v1/urls/abc1234/analytics"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("An unexpected error occurred"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("sensitive internal detail"))));
+    }
+
+    @Test
     void redirectReturns302WithLocationHeader() throws Exception {
         when(urlService.resolveAndRecordRedirect("abc1234")).thenReturn("https://example.com/page");
 
