@@ -16,6 +16,94 @@ TinyURL is a Spring Boot REST application that provides three capabilities:
 
 The application generates seven-character alphanumeric codes, persists URL mappings in H2, counts redirects, and returns structured error responses for invalid URLs and missing short codes.
 
+### 2.1 Architecture overview
+
+TinyURL is a synchronous, layered Spring Boot application. Spring MVC receives an HTTP request, the controller delegates the use case to the service layer, and the service coordinates validation, short-code generation, persistence, and response construction. Spring Data JPA and Hibernate isolate the application from direct JDBC code, while H2 provides the current local datastore.
+
+The service layer is the application-orchestration boundary. It determines the order of domain and persistence operations and owns the transaction for each use case. The application does not currently use asynchronous messaging, background workers, distributed workflows, or external service orchestration.
+
+### 2.2 Components
+
+```mermaid
+flowchart TD
+    CLIENT["API client or browser"] --> WEB["Web/API layer"]
+    WEB --> APP["Application orchestration layer"]
+    APP --> DOMAIN["Domain and utility layer"]
+    APP --> DATA["Persistence layer"]
+    DATA --> DB["H2 file database"]
+    ERROR["Exception handling"] -. translates failures .-> WEB
+    OPS["Actuator"] -. exposes runtime status .-> CLIENT
+```
+
+| Architectural component | Implementing types | Responsibility |
+|---|---|---|
+| Web/API layer | `TinyURLController`, request and response DTOs | Defines HTTP contracts, validates request fields, delegates use cases, and constructs HTTP responses |
+| Application orchestration | `UrlService`, `UrlServiceImpl` | Coordinates URL validation, short-code selection, persistence, redirects, analytics, and transaction boundaries |
+| Domain model | `UrlMapping` | Represents a persisted mapping and owns redirect-count behavior |
+| Code generation | `ShortCodeGenerator` | Produces secure random seven-character candidate codes |
+| Persistence | `UrlRepository`, Spring Data JPA, Hibernate | Queries and stores mappings and checks candidate existence |
+| Error translation | `GlobalExceptionHandler`, application exceptions, `ApiError` | Converts known failures into consistent HTTP 400 and 404 responses |
+| Runtime operations | Spring Boot Actuator | Exposes health, information, and metrics endpoints |
+| Datastore | H2 file database | Stores URL mappings for the current single-node runtime |
+
+### 2.3 Orchestration model
+
+The application uses request-scoped orchestration rather than a separate workflow engine.
+
+1. The embedded web server and Spring MVC select the controller method.
+2. The controller validates the transport request and delegates one use case to `UrlService`.
+3. `UrlServiceImpl` executes the required steps in a fixed, synchronous order.
+4. Spring manages the transaction around the service method.
+5. Repository calls execute through JPA/Hibernate against H2.
+6. The service maps domain data to a response DTO or returns the redirect target.
+7. The controller completes the HTTP response.
+8. A known exception is intercepted by `GlobalExceptionHandler` and translated into `ApiError`.
+
+| Use case | Orchestration sequence | Transaction model |
+|---|---|---|
+| Create short URL | Validate URL → generate candidate → check uniqueness → persist mapping → construct response | Read/write transaction |
+| Redirect | Find mapping → increment redirect count → set last-access time → return original URL | Read/write transaction; JPA dirty checking persists changes |
+| Read analytics | Find mapping → map entity fields to response | Read-only transaction |
+
+The orchestration is deliberately simple: a request is handled on one thread and returns only after its database work completes. A failed step aborts the remaining steps. Runtime exceptions cause the active transaction to roll back under Spring’s default transaction behavior.
+
+### 2.4 Control flow
+
+```mermaid
+flowchart TD
+    REQUEST["HTTP request"] --> ROUTE{"Route"}
+    ROUTE -->|POST /api/v1/urls| CREATE["Create URL orchestration"]
+    ROUTE -->|GET /shortCode| REDIRECT["Redirect orchestration"]
+    ROUTE -->|GET analytics| ANALYTICS["Analytics orchestration"]
+    CREATE --> REPO["UrlRepository"]
+    REDIRECT --> REPO
+    ANALYTICS --> REPO
+    REPO --> H2["H2 database"]
+    CREATE --> CREATED["201 Created"]
+    REDIRECT --> FOUND["302 Found"]
+    ANALYTICS --> OK["200 OK"]
+    CREATE -. known failure .-> APIERR["400/404 ApiError"]
+    REDIRECT -. known failure .-> APIERR
+    ANALYTICS -. known failure .-> APIERR
+```
+
+Detailed sequence diagrams for each route appear in the request-flow section of this document.
+
+### 2.5 Key decisions at a glance
+
+| Decision | Why it was chosen | Consequence |
+|---|---|---|
+| Layered modular monolith | Appropriate simplicity for the current feature set | Easy to understand and test, but all capabilities deploy together |
+| Synchronous request processing | No background work or external coordination is currently required | Simple execution model; request latency includes all database work |
+| Service-owned orchestration and transactions | Keeps controllers thin and persistence activity inside explicit use cases | Service implementation is the main coordination point |
+| Seven-character `SecureRandom` codes | Provides a large, hard-to-predict identifier space | Requires collision detection despite the large keyspace |
+| Application check plus database uniqueness | Avoids most collisions and protects final data integrity | Concurrent insert races still require better exception/retry handling |
+| Transactional redirect analytics | Updates the count as part of resolution | Current read-modify-write logic can lose concurrent increments |
+| H2 file persistence | Keeps local setup small and self-contained | Not suitable for horizontally scaled or production deployment |
+| DTO-based API boundary | Avoids exposing JPA entities directly | Requires explicit mapping in the service layer |
+| Central exception translation | Produces consistent client errors | Unmapped runtime failures still use Spring’s default error handling |
+| Open Session in View disabled | Keeps database access within service transactions | Lazy data must be resolved before leaving the service layer |
+
 ## 3. Technology stack
 
 | Area | Current technology |
