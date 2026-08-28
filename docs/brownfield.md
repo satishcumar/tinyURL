@@ -31,3 +31,24 @@ The following test enhancements strengthen regression protection for the brownfi
 | Medium | Exception-handler tests | Covers 400, 404, 503, and generic 500 responses |
 | Medium | Configuration integration test | Confirms test profile uses memory H2 and the configured base URL |
 | Low | Actuator health test | Confirms operational endpoints remain available |
+
+## Application Enhancement Backlog
+
+These enhancements extend the existing application beyond corrective refactoring. They improve data durability, security, URL lifecycle management, scalability, API usability, observability, and reporting.
+
+| Priority | Enhancement | Value |
+|---|---|---|
+| Critical | Replace `ddl-auto: create-drop` | The local file-based H2 database is erased whenever the application restarts |
+| High | Add Flyway database migrations | Provides controlled, versioned schema changes |
+| High | Add URL expiration | Supports temporary links and prevents indefinite data growth |
+| High | Add rate limiting | Protects URL creation and redirect endpoints from abuse |
+| High | Add custom short codes | Allows users to request memorable aliases such as `/spring-guide` |
+| High | Validate unsafe destinations | Rejects dangerous schemes and optionally blocks localhost/private-network destinations |
+| Medium | Add URL deactivation/deletion | Enables lifecycle management without immediately deleting analytics |
+| Medium | Add duplicate URL handling | Optionally returns an existing short URL instead of creating duplicates |
+| Medium | Add caching for redirects | Reduces database reads for frequently accessed links |
+| Medium | Add richer analytics | Tracks daily redirects, referrers, browsers, and approximate geography |
+| Medium | Add OpenAPI/Swagger documentation | Makes the REST API discoverable and easier to test |
+| Medium | Add structured logging and correlation IDs | Improves troubleshooting and audit traceability |
+| Low | Add QR-code generation | Provides a useful consumer-facing feature |
+| Low | Add analytics pagination/export | Supports reporting when usage grows |
