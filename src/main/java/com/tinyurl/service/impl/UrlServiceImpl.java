@@ -1,15 +1,16 @@
 package com.tinyurl.service.impl;
 
+import com.tinyurl.config.TinyUrlProperties;
 import com.tinyurl.domain.UrlMapping;
 import com.tinyurl.domain.UrlRepository;
 import com.tinyurl.dto.CreateUrlResponse;
 import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.exception.InvalidUrlException;
+import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
 import com.tinyurl.service.UrlService;
 import com.tinyurl.util.ShortCodeGenerator;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,31 +23,50 @@ import java.time.Instant;
 public class UrlServiceImpl implements UrlService {
 
     private static final int MAX_SHORT_CODE_ATTEMPTS = 5;
-    @Autowired
-    private ShortCodeGenerator shortCodeGenerator;
-    private final Clock clock = Clock.systemUTC();
-    @Autowired
-    UrlRepository repository;
-    @Transactional
+
+    private final ShortCodeGenerator shortCodeGenerator;
+    private final UrlRepository repository;
+    private final Clock clock;
+    private final TinyUrlProperties properties;
+
+    public UrlServiceImpl(
+            ShortCodeGenerator shortCodeGenerator,
+            UrlRepository repository,
+            Clock clock,
+            TinyUrlProperties properties) {
+        this.shortCodeGenerator = shortCodeGenerator;
+        this.repository = repository;
+        this.clock = clock;
+        this.properties = properties;
+    }
+
     public CreateUrlResponse createShortUrl(String originalUrl) {
         validateUrl(originalUrl);
 
-        String shortCode = generateUniqueShortCode();
-        Instant createdAt = clock.instant();
-        UrlMapping saved = repository.save(new UrlMapping(shortCode, originalUrl, createdAt));
+        for (int attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt++) {
+            String shortCode = shortCodeGenerator.generate();
+            if (repository.existsByShortCode(shortCode)) {
+                continue;
+            }
 
-        String baseUrl = "http://localhost:8080";
-        return new CreateUrlResponse(
-                saved.getShortCode(),
-                baseUrl + "/" + saved.getShortCode(),
-                saved.getOriginalUrl(),
-                saved.getCreatedAt());
+            try {
+                Instant createdAt = clock.instant();
+                UrlMapping saved = repository.saveAndFlush(
+                        new UrlMapping(shortCode, originalUrl, createdAt));
+                return toCreateResponse(saved);
+            } catch (DataIntegrityViolationException exception) {
+                // A concurrent request may have persisted the same generated code
+                // after the existence check. Generate another candidate.
+            }
+        }
+
+        throw new ShortCodeGenerationException();
     }
 
     @Transactional
     public String resolveAndRecordRedirect(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
-        mapping.recordRedirect(clock.instant());
+        repository.recordRedirect(shortCode, clock.instant());
         return mapping.getOriginalUrl();
     }
 
@@ -66,17 +86,19 @@ public class UrlServiceImpl implements UrlService {
                 .orElseThrow(() -> new UrlNotFoundException(shortCode));
     }
 
-    private String generateUniqueShortCode() {
-        for (int attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt++) {
-            String candidate = shortCodeGenerator.generate();
-            if (!repository.existsByShortCode(candidate)) {
-                return candidate;
-            }
-        }
-        throw new IllegalStateException("Unable to generate a unique short code");
+    private CreateUrlResponse toCreateResponse(UrlMapping mapping) {
+        return new CreateUrlResponse(
+                mapping.getShortCode(),
+                properties.getBaseUrl() + "/" + mapping.getShortCode(),
+                mapping.getOriginalUrl(),
+                mapping.getCreatedAt());
     }
 
     private void validateUrl(String value) {
+        if (value == null || value.isBlank()) {
+            throw new InvalidUrlException("URL is required");
+        }
+
         try {
             URI uri = new URI(value);
             String scheme = uri.getScheme();

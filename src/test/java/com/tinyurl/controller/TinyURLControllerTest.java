@@ -2,7 +2,8 @@ package com.tinyurl.controller;
 
 import com.tinyurl.dto.CreateUrlResponse;
 import com.tinyurl.dto.UrlAnalyticsResponse;
-import com.tinyurl.exception.InvalidUrlException;
+import com.tinyurl.exception.GlobalExceptionHandler;
+import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
 import com.tinyurl.service.UrlService;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +16,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,7 +39,8 @@ class TinyURLControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new InvalidUrlException.GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(
+                        Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)))
                 .build();
     }
 
@@ -68,6 +72,42 @@ class TinyURLControllerTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("url is required"))
                 .andExpect(jsonPath("$.path").value("/api/v1/urls"));
+    }
+
+    @Test
+    void createReturns503WhenUniqueCodeCannotBeGenerated() throws Exception {
+        when(urlService.createShortUrl("https://example.com"))
+                .thenThrow(new ShortCodeGenerationException());
+
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://example.com\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message").value("Unable to generate a unique short code"));
+    }
+
+    @Test
+    void createReturns400WhenUrlExceedsMaximumLength() throws Exception {
+        String oversizedUrl = "https://example.com/" + "a".repeat(2048);
+
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"" + oversizedUrl + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("url must be at most 2048 characters"));
+    }
+
+    @Test
+    void unexpectedFailureReturnsGeneric500WithoutInternalDetails() throws Exception {
+        when(urlService.getAnalytics("abc1234"))
+                .thenThrow(new IllegalStateException("sensitive internal detail"));
+
+        mockMvc.perform(get("/api/v1/urls/abc1234/analytics"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("An unexpected error occurred"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("sensitive internal detail"))));
     }
 
     @Test

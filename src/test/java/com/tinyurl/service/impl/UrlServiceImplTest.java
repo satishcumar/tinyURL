@@ -1,18 +1,25 @@
 package com.tinyurl.service.impl;
 
+import com.tinyurl.config.TinyUrlProperties;
 import com.tinyurl.domain.UrlMapping;
 import com.tinyurl.domain.UrlRepository;
 import com.tinyurl.dto.CreateUrlResponse;
 import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.exception.InvalidUrlException;
+import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
 import com.tinyurl.util.ShortCodeGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -29,6 +36,12 @@ class UrlServiceImplTest {
     @Mock
     private UrlRepository repository;
 
+    @Mock
+    private Clock clock;
+
+    @Mock
+    private TinyUrlProperties properties;
+
     @InjectMocks
     private UrlServiceImpl service;
 
@@ -36,7 +49,9 @@ class UrlServiceImplTest {
     void createShortUrlPersistsMappingAndReturnsResponse() {
         when(shortCodeGenerator.generate()).thenReturn("Ab12xYz");
         when(repository.existsByShortCode("Ab12xYz")).thenReturn(false);
-        when(repository.save(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.saveAndFlush(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(properties.getBaseUrl()).thenReturn("http://localhost:8080");
 
         CreateUrlResponse response = service.createShortUrl("https://example.com/articles/1");
 
@@ -44,7 +59,8 @@ class UrlServiceImplTest {
         assertEquals("http://localhost:8080/Ab12xYz", response.shortUrl());
         assertEquals("https://example.com/articles/1", response.originalUrl());
         assertNotNull(response.createdAt());
-        verify(repository).save(any(UrlMapping.class));
+        assertEquals(Instant.parse("2026-01-01T00:00:00Z"), response.createdAt());
+        verify(repository).saveAndFlush(any(UrlMapping.class));
     }
 
     @Test
@@ -62,7 +78,9 @@ class UrlServiceImplTest {
         when(shortCodeGenerator.generate()).thenReturn("taken01", "free002");
         when(repository.existsByShortCode("taken01")).thenReturn(true);
         when(repository.existsByShortCode("free002")).thenReturn(false);
-        when(repository.save(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.saveAndFlush(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(properties.getBaseUrl()).thenReturn("http://localhost:8080");
 
         CreateUrlResponse response = service.createShortUrl("https://example.com");
 
@@ -71,29 +89,89 @@ class UrlServiceImplTest {
     }
 
     @Test
+    void createShortUrlRetriesWhenConcurrentInsertWinsRace() {
+        when(shortCodeGenerator.generate()).thenReturn("race001", "free002");
+        when(repository.existsByShortCode(anyString())).thenReturn(false);
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(repository.saveAndFlush(any(UrlMapping.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate short code"))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(properties.getBaseUrl()).thenReturn("http://localhost:8080");
+
+        CreateUrlResponse response = service.createShortUrl("https://example.com");
+
+        assertEquals("free002", response.shortCode());
+        verify(shortCodeGenerator, times(2)).generate();
+        verify(repository, times(2)).saveAndFlush(any(UrlMapping.class));
+    }
+
+    @Test
+    void createShortUrlStopsAfterFiveConcurrentInsertConflicts() {
+        when(shortCodeGenerator.generate()).thenReturn("race001");
+        when(repository.existsByShortCode("race001")).thenReturn(false);
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(repository.saveAndFlush(any(UrlMapping.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate short code"));
+
+        assertThrows(
+                ShortCodeGenerationException.class,
+                () -> service.createShortUrl("https://example.com"));
+
+        verify(shortCodeGenerator, times(5)).generate();
+        verify(repository, times(5)).saveAndFlush(any(UrlMapping.class));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "ftp://example.com/file", "not-a-url", "https://exa mple.com", "/relative/path"})
+    void createShortUrlRejectsInvalidValues(String value) {
+        assertThrows(InvalidUrlException.class, () -> service.createShortUrl(value));
+        verifyNoInteractions(shortCodeGenerator, repository);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://example.com",
+            "HTTPS://example.com/path",
+            "https://example.com:8443/path?item=1"
+    })
+    void createShortUrlAcceptsSupportedHttpUrls(String value) {
+        when(shortCodeGenerator.generate()).thenReturn("abc1234");
+        when(repository.existsByShortCode("abc1234")).thenReturn(false);
+        when(repository.saveAndFlush(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(properties.getBaseUrl()).thenReturn("http://localhost:8080");
+
+        CreateUrlResponse response = service.createShortUrl(value);
+
+        assertEquals(value, response.originalUrl());
+    }
+
+    @Test
     void createShortUrlFailsAfterFiveCollisions() {
         when(shortCodeGenerator.generate()).thenReturn("taken01");
         when(repository.existsByShortCode("taken01")).thenReturn(true);
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
+        ShortCodeGenerationException exception = assertThrows(
+                ShortCodeGenerationException.class,
                 () -> service.createShortUrl("https://example.com"));
 
         assertEquals("Unable to generate a unique short code", exception.getMessage());
         verify(shortCodeGenerator, times(5)).generate();
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test
     void resolveAndRecordRedirectUpdatesAnalyticsData() {
         UrlMapping mapping = new UrlMapping("abc1234", "https://example.com", Instant.parse("2026-01-01T00:00:00Z"));
         when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-02T00:00:00Z"));
+        when(repository.recordRedirect("abc1234", Instant.parse("2026-01-02T00:00:00Z"))).thenReturn(1);
 
         String result = service.resolveAndRecordRedirect("abc1234");
 
         assertEquals("https://example.com", result);
-        assertEquals(1, mapping.getRedirectCount());
-        assertNotNull(mapping.getLastAccessedAt());
+        verify(repository).recordRedirect("abc1234", Instant.parse("2026-01-02T00:00:00Z"));
     }
 
     @Test
