@@ -1,9 +1,9 @@
 package com.tinyurl.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.RestController;
+import com.tinyurl.dto.CreateUrlRequest;
+import com.tinyurl.dto.CreateUrlResponse;
+import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.service.UrlService;
-import com.tinyurl.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -12,15 +12,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+
 @RestController
 public class TinyURLController {
+    private final UrlService urlService;
 
-
-    @Autowired
-    private  UrlService urlService;
-
+    public TinyURLController(UrlService urlService) {
+        this.urlService = urlService;
+    }
 
     @PostMapping("/api/v1/urls")
     public ResponseEntity<CreateUrlResponse> create(@Valid @RequestBody CreateUrlRequest request) {
