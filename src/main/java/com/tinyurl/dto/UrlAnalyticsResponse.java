@@ -6,6 +6,16 @@ public record UrlAnalyticsResponse(
         String originalUrl,
         long redirectCount,
         Instant createdAt,
-        Instant lastAccessedAt
+        Instant lastAccessedAt,
+        Instant expiresAt,
+        String status
 ) {
+    public UrlAnalyticsResponse(
+            String shortCode,
+            String originalUrl,
+            long redirectCount,
+            Instant createdAt,
+            Instant lastAccessedAt) {
+        this(shortCode, originalUrl, redirectCount, createdAt, lastAccessedAt, null, "ACTIVE");
+    }
 }

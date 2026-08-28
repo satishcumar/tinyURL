@@ -8,6 +8,7 @@ import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.exception.InvalidUrlException;
 import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
+import com.tinyurl.exception.UrlExpiredException;
 import com.tinyurl.service.UrlService;
 import com.tinyurl.util.ShortCodeGenerator;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,7 +42,12 @@ public class UrlServiceImpl implements UrlService {
     }
 
     public CreateUrlResponse createShortUrl(String originalUrl) {
+        return createShortUrl(originalUrl, null);
+    }
+
+    public CreateUrlResponse createShortUrl(String originalUrl, Instant expiresAt) {
         validateUrl(originalUrl);
+        validateExpiration(expiresAt);
 
         for (int attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt++) {
             String shortCode = shortCodeGenerator.generate();
@@ -52,7 +58,7 @@ public class UrlServiceImpl implements UrlService {
             try {
                 Instant createdAt = clock.instant();
                 UrlMapping saved = repository.saveAndFlush(
-                        new UrlMapping(shortCode, originalUrl, createdAt));
+                        new UrlMapping(shortCode, originalUrl, createdAt, expiresAt));
                 return toCreateResponse(saved);
             } catch (DataIntegrityViolationException exception) {
                 // A concurrent request may have persisted the same generated code
@@ -66,19 +72,26 @@ public class UrlServiceImpl implements UrlService {
     @Transactional
     public String resolveAndRecordRedirect(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
-        repository.recordRedirect(shortCode, clock.instant());
+        Instant now = clock.instant();
+        if (mapping.isExpired(now)) {
+            throw new UrlExpiredException(shortCode);
+        }
+        repository.recordRedirect(shortCode, now);
         return mapping.getOriginalUrl();
     }
 
     @Transactional(readOnly = true)
     public UrlAnalyticsResponse getAnalytics(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
+        Instant now = clock.instant();
         return new UrlAnalyticsResponse(
                 mapping.getShortCode(),
                 mapping.getOriginalUrl(),
                 mapping.getRedirectCount(),
                 mapping.getCreatedAt(),
-                mapping.getLastAccessedAt());
+                mapping.getLastAccessedAt(),
+                mapping.getExpiresAt(),
+                mapping.isExpired(now) ? "EXPIRED" : "ACTIVE");
     }
 
     private UrlMapping findByShortCode(String shortCode) {
@@ -91,7 +104,15 @@ public class UrlServiceImpl implements UrlService {
                 mapping.getShortCode(),
                 properties.getBaseUrl() + "/" + mapping.getShortCode(),
                 mapping.getOriginalUrl(),
-                mapping.getCreatedAt());
+                mapping.getCreatedAt(),
+                mapping.getExpiresAt(),
+                mapping.isExpired(clock.instant()) ? "EXPIRED" : "ACTIVE");
+    }
+
+    private void validateExpiration(Instant expiresAt) {
+        if (expiresAt != null && !expiresAt.isAfter(clock.instant())) {
+            throw new InvalidUrlException("Expiration must be in the future");
+        }
     }
 
     private void validateUrl(String value) {
