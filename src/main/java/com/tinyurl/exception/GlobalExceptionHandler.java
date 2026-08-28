@@ -45,6 +45,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(UrlUnavailableException.class)
+    public ResponseEntity<ApiError> handleUnavailable(
+            UrlUnavailableException exception,
+            HttpServletRequest request) {
+        return build(HttpStatus.GONE, exception.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception exception, HttpServletRequest request) {
         return build(

@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,13 +27,16 @@ public class TinyURLController {
 
     @PostMapping("/api/v1/urls")
     public ResponseEntity<CreateUrlResponse> create(@Valid @RequestBody CreateUrlRequest request) {
-        CreateUrlResponse response = urlService.createShortUrl(request.url());
+        CreateUrlResponse response = urlService.createShortUrl(request.url(), request.expiresAt());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{shortCode}")
-    public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
-        String originalUrl = urlService.resolveAndRecordRedirect(shortCode);
+    public ResponseEntity<Void> redirect(
+            @PathVariable String shortCode,
+            @org.springframework.web.bind.annotation.RequestHeader(value = HttpHeaders.REFERER, required = false) String referrer,
+            @org.springframework.web.bind.annotation.RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent) {
+        String originalUrl = urlService.resolveAndRecordRedirect(shortCode, referrer, userAgent);
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, URI.create(originalUrl).toString())
                 .build();
@@ -41,5 +45,11 @@ public class TinyURLController {
     @GetMapping("/api/v1/urls/{shortCode}/analytics")
     public UrlAnalyticsResponse analytics(@PathVariable String shortCode) {
         return urlService.getAnalytics(shortCode);
+    }
+
+    @DeleteMapping("/api/v1/urls/{shortCode}")
+    public ResponseEntity<Void> deactivate(@PathVariable String shortCode) {
+        urlService.deactivate(shortCode);
+        return ResponseEntity.noContent().build();
     }
 }

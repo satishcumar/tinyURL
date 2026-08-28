@@ -22,6 +22,7 @@ import java.time.ZoneOffset;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -47,12 +48,14 @@ class TinyURLControllerTest {
     @Test
     void createReturns201AndResponseBody() throws Exception {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
-        when(urlService.createShortUrl("https://example.com"))
+        when(urlService.createShortUrl("https://example.com", null))
                 .thenReturn(new CreateUrlResponse(
                         "abc1234",
                         "http://localhost:8080/abc1234",
                         "https://example.com",
-                        createdAt));
+                        createdAt,
+                        null,
+                        "ACTIVE"));
 
         mockMvc.perform(post("/api/v1/urls")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -76,7 +79,7 @@ class TinyURLControllerTest {
 
     @Test
     void createReturns503WhenUniqueCodeCannotBeGenerated() throws Exception {
-        when(urlService.createShortUrl("https://example.com"))
+        when(urlService.createShortUrl("https://example.com", null))
                 .thenThrow(new ShortCodeGenerationException());
 
         mockMvc.perform(post("/api/v1/urls")
@@ -112,7 +115,7 @@ class TinyURLControllerTest {
 
     @Test
     void redirectReturns302WithLocationHeader() throws Exception {
-        when(urlService.resolveAndRecordRedirect("abc1234")).thenReturn("https://example.com/page");
+        when(urlService.resolveAndRecordRedirect("abc1234", null, null)).thenReturn("https://example.com/page");
 
         mockMvc.perform(get("/abc1234"))
                 .andExpect(status().isFound())
@@ -127,7 +130,12 @@ class TinyURLControllerTest {
                 "https://example.com",
                 3,
                 Instant.parse("2026-01-01T00:00:00Z"),
-                Instant.parse("2026-01-02T00:00:00Z")));
+                Instant.parse("2026-01-02T00:00:00Z"),
+                null,
+                "ACTIVE",
+                java.util.List.of(),
+                java.util.Map.of(),
+                java.util.Map.of()));
 
         mockMvc.perform(get("/api/v1/urls/abc1234/analytics"))
                 .andExpect(status().isOk())
@@ -145,5 +153,13 @@ class TinyURLControllerTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("Short code not found: missing"))
                 .andExpect(jsonPath("$.path").value("/api/v1/urls/missing/analytics"));
+    }
+
+    @Test
+    void deactivateReturns204() throws Exception {
+        mockMvc.perform(delete("/api/v1/urls/abc1234"))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(urlService).deactivate("abc1234");
     }
 }

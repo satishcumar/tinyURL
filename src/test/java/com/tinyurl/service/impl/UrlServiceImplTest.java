@@ -3,12 +3,14 @@ package com.tinyurl.service.impl;
 import com.tinyurl.config.TinyUrlProperties;
 import com.tinyurl.domain.UrlMapping;
 import com.tinyurl.domain.UrlRepository;
+import com.tinyurl.domain.RedirectEventRepository;
 import com.tinyurl.dto.CreateUrlResponse;
 import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.exception.InvalidUrlException;
 import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
 import com.tinyurl.util.ShortCodeGenerator;
+import com.tinyurl.service.RedirectAnalyticsRecorder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,6 +43,12 @@ class UrlServiceImplTest {
 
     @Mock
     private TinyUrlProperties properties;
+
+    @Mock
+    private RedirectAnalyticsRecorder analyticsRecorder;
+
+    @Mock
+    private RedirectEventRepository redirectEventRepository;
 
     @InjectMocks
     private UrlServiceImpl service;
@@ -172,6 +180,49 @@ class UrlServiceImplTest {
 
         assertEquals("https://example.com", result);
         verify(repository).recordRedirect("abc1234", Instant.parse("2026-01-02T00:00:00Z"));
+        verify(analyticsRecorder).record(
+                "abc1234", Instant.parse("2026-01-02T00:00:00Z"), null, null);
+    }
+
+    @Test
+    void expiredUrlReturnsGoneWithoutRecordingRedirect() {
+        Instant now = Instant.parse("2026-01-02T00:00:00Z");
+        UrlMapping mapping = new UrlMapping(
+                "abc1234", "https://example.com", now.minusSeconds(3600), now);
+        when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(now);
+
+        assertThrows(
+                com.tinyurl.exception.UrlUnavailableException.class,
+                () -> service.resolveAndRecordRedirect("abc1234"));
+
+        verify(repository, never()).recordRedirect(anyString(), any());
+        verifyNoInteractions(analyticsRecorder);
+    }
+
+    @Test
+    void analyticsFailureDoesNotBlockRedirect() {
+        Instant now = Instant.parse("2026-01-02T00:00:00Z");
+        UrlMapping mapping = new UrlMapping("abc1234", "https://example.com", now.minusSeconds(3600));
+        when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(now);
+        doThrow(new IllegalStateException("analytics unavailable"))
+                .when(analyticsRecorder).record("abc1234", now, null, null);
+
+        assertEquals("https://example.com", service.resolveAndRecordRedirect("abc1234"));
+        verify(repository).recordRedirect("abc1234", now);
+    }
+
+    @Test
+    void rejectsExpirationThatIsNotInFuture() {
+        Instant now = Instant.parse("2026-01-02T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+
+        assertThrows(
+                InvalidUrlException.class,
+                () -> service.createShortUrl("https://example.com", now));
+
+        verifyNoInteractions(shortCodeGenerator, repository);
     }
 
     @Test
@@ -181,6 +232,9 @@ class UrlServiceImplTest {
         UrlMapping mapping = new UrlMapping("abc1234", "https://example.com", createdAt);
         mapping.recordRedirect(accessedAt);
         when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-03T00:00:00Z"));
+        when(redirectEventRepository.findByShortCodeAndOccurredAtGreaterThanEqualOrderByOccurredAtAsc(
+                eq("abc1234"), any(Instant.class))).thenReturn(java.util.List.of());
 
         UrlAnalyticsResponse response = service.getAnalytics("abc1234");
 
@@ -189,6 +243,7 @@ class UrlServiceImplTest {
         assertEquals(1, response.redirectCount());
         assertEquals(createdAt, response.createdAt());
         assertEquals(accessedAt, response.lastAccessedAt());
+        assertEquals("ACTIVE", response.status());
     }
 
     @Test

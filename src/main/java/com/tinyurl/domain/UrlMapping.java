@@ -33,13 +33,28 @@ public class UrlMapping {
     @Column(name = "last_accessed_at")
     private Instant lastAccessedAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "active", nullable = false)
+    private boolean active;
+
+    @Column(name = "deactivated_at")
+    private Instant deactivatedAt;
+
     protected UrlMapping() {
     }
 
     public UrlMapping(String shortCode, String originalUrl, Instant createdAt) {
+        this(shortCode, originalUrl, createdAt, null);
+    }
+
+    public UrlMapping(String shortCode, String originalUrl, Instant createdAt, Instant expiresAt) {
         this.shortCode = shortCode;
         this.originalUrl = originalUrl;
         this.createdAt = createdAt;
+        this.expiresAt = expiresAt;
+        this.active = true;
         this.redirectCount = 0;
     }
 
@@ -65,6 +80,27 @@ public class UrlMapping {
 
     public Instant getLastAccessedAt() {
         return lastAccessedAt;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public Instant getDeactivatedAt() {
+        return deactivatedAt;
+    }
+
+    public boolean isExpired(Instant now) {
+        return expiresAt != null && !now.isBefore(expiresAt);
+    }
+
+    public void deactivate(Instant when) {
+        this.active = false;
+        this.deactivatedAt = when;
     }
 
     public void recordRedirect(Instant accessedAt) {
