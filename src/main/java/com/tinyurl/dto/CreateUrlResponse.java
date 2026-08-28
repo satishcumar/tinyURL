@@ -6,8 +6,6 @@ public record CreateUrlResponse(
         String shortCode,
         String shortUrl,
         String originalUrl,
-        Instant createdAt,
-        Instant expiresAt,
-        String status
+        Instant createdAt
 ) {
 }
