@@ -16,3 +16,18 @@ This document records the prioritized brownfield improvements identified during 
 | Medium | Improve unmapped exception handling | Retry exhaustion and database conflicts currently lack controlled responses |
 | Low | Remove redundant or unused dependencies and methods | Reduces build complexity and confusion |
 | Low | Improve naming and formatting | Makes the code more consistent and reviewable |
+
+## Test Case Enhancement Backlog
+
+The following test enhancements strengthen regression protection for the brownfield refactoring work and validate application behavior across API, service, persistence, concurrency, configuration, and operational boundaries.
+
+| Priority | Enhancement | Why |
+|---|---|---|
+| High | End-to-end API test | Proves controller, service, repository, transaction, and H2 work together |
+| High | Real concurrent redirect test | Current repository test increments sequentially, not concurrently |
+| High | Database uniqueness test | Verifies the `short_code` constraint directly |
+| High | Insert-race retry exhaustion test | Confirms repeated database conflicts stop after five attempts |
+| Medium | URL validation boundary tests | Covers null, blank, length, scheme, host, and malformed URLs |
+| Medium | Exception-handler tests | Covers 400, 404, 503, and generic 500 responses |
+| Medium | Configuration integration test | Confirms test profile uses memory H2 and the configured base URL |
+| Low | Actuator health test | Confirms operational endpoints remain available |
