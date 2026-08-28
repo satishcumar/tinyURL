@@ -1,0 +1,109 @@
+package com.tinyurl.controller;
+
+import com.tinyurl.dto.CreateUrlResponse;
+import com.tinyurl.dto.UrlAnalyticsResponse;
+import com.tinyurl.exception.InvalidUrlException;
+import com.tinyurl.exception.UrlNotFoundException;
+import com.tinyurl.service.UrlService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.Instant;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@ExtendWith(MockitoExtension.class)
+class TinyURLControllerTest {
+
+    @Mock
+    private UrlService urlService;
+
+    @InjectMocks
+    private TinyURLController controller;
+
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new InvalidUrlException.GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void createReturns201AndResponseBody() throws Exception {
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        when(urlService.createShortUrl("https://example.com"))
+                .thenReturn(new CreateUrlResponse(
+                        "abc1234",
+                        "http://localhost:8080/abc1234",
+                        "https://example.com",
+                        createdAt));
+
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://example.com\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shortCode").value("abc1234"))
+                .andExpect(jsonPath("$.shortUrl").value("http://localhost:8080/abc1234"))
+                .andExpect(jsonPath("$.originalUrl").value("https://example.com"));
+    }
+
+    @Test
+    void createReturns400WhenUrlIsBlank() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("url is required"))
+                .andExpect(jsonPath("$.path").value("/api/v1/urls"));
+    }
+
+    @Test
+    void redirectReturns302WithLocationHeader() throws Exception {
+        when(urlService.resolveAndRecordRedirect("abc1234")).thenReturn("https://example.com/page");
+
+        mockMvc.perform(get("/abc1234"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://example.com/page"))
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void analyticsReturnsStoredStatistics() throws Exception {
+        when(urlService.getAnalytics("abc1234")).thenReturn(new UrlAnalyticsResponse(
+                "abc1234",
+                "https://example.com",
+                3,
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z")));
+
+        mockMvc.perform(get("/api/v1/urls/abc1234/analytics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shortCode").value("abc1234"))
+                .andExpect(jsonPath("$.redirectCount").value(3))
+                .andExpect(jsonPath("$.lastAccessedAt").value("2026-01-02T00:00:00Z"));
+    }
+
+    @Test
+    void missingShortCodeReturns404ApiError() throws Exception {
+        when(urlService.getAnalytics("missing")).thenThrow(new UrlNotFoundException("missing"));
+
+        mockMvc.perform(get("/api/v1/urls/missing/analytics"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Short code not found: missing"))
+                .andExpect(jsonPath("$.path").value("/api/v1/urls/missing/analytics"));
+    }
+}
