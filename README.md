@@ -1,2 +1,6 @@
 # tinyURL
-URL Shortener 
+URL Shortener
+
+## Documentation
+
+- [Current application architecture](docs/tinyurl-architecture.md)
