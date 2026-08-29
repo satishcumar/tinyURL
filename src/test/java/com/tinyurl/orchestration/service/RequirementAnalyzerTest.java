@@ -17,4 +17,16 @@ class RequirementAnalyzerTest {
         assertThat(result.ambiguities()).isNotEmpty();
         assertThat(result.risks()).contains("Backward compatibility of persisted records");
     }
+
+    @Test
+    void identifiesBrownfieldMigrationImpactAndDataRisk() {
+        var result = analyzer.analyze(
+                "Replace create-drop with Flyway migrations while preserving existing data");
+
+        assertThat(result.scenario().name()).isEqualTo("BROWNFIELD");
+        assertThat(result.acceptanceCriteria()).hasSize(5);
+        assertThat(result.repositoryImpacts()).extracting("component")
+                .contains("pom.xml", "application-local.yaml", "db/migration", "UrlMapping");
+        assertThat(result.risks()).anyMatch(risk -> risk.contains("baselining"));
+    }
 }

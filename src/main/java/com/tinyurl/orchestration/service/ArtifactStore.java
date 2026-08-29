@@ -148,6 +148,7 @@ public class ArtifactStore {
         return "# Engineering outcome\n\n" +
                 "- Execution: `" + execution.id() + "`\n" +
                 "- Requirement version: " + execution.requirementVersion() + "\n" +
+                "- Scenario: `" + execution.analysis().scenario() + "`\n" +
                 "- Final status: `" + execution.status() + "`\n" +
                 "- Tasks passed: " + execution.metrics().successfulTasks() + "/" +
                 execution.metrics().totalTasks() + "\n" +
@@ -155,8 +156,19 @@ public class ArtifactStore {
                 "- Rollbacks: " + execution.metrics().rollbackCount() + "\n" +
                 "- End-to-end latency (ms): " + execution.metrics().endToEndLatencyMillis() + "\n\n" +
                 "## Rationale\n\n" + execution.analysis().normalizedRequirement() + "\n\n" +
+                "## Repository impact\n\n" + execution.analysis().repositoryImpacts().stream()
+                        .map(impact -> "- **" + safeMarkdown(impact.component()) + "**: " +
+                                safeMarkdown(impact.impact()) + " — Risk: " +
+                                safeMarkdown(impact.risk()) + "\n")
+                        .collect(java.util.stream.Collectors.joining()) +
                 "## Assumptions\n\n" + markdownList(execution.analysis().assumptions()) +
                 "\n## Risks\n\n" + markdownList(execution.analysis().risks()) +
+                "\n## Governance evidence\n\n" +
+                "- Plan approval: " + approvalEvidence(execution.planApproval()) + "\n" +
+                "- Schema approval: " + approvalEvidence(execution.schemaApproval()) + "\n" +
+                "- Replans recorded: " + execution.replans().size() + "\n" +
+                "- Recovery-point attempts: " + execution.attempts().stream()
+                        .filter(attempt -> attempt.taskId().equals("recovery-point")).count() + "\n" +
                 "\n## Limitations\n\n" +
                 "- Requirement analysis uses a deterministic prototype adapter.\n" +
                 "- Execution is synchronous and filesystem-backed.\n" +
@@ -173,5 +185,10 @@ public class ArtifactStore {
 
     private String safeMarkdown(String value) {
         return value.replace("|", "\\|").replace("\r", " ").replace("\n", " ");
+    }
+
+    private String approvalEvidence(com.tinyurl.orchestration.model.ApprovalRecord approval) {
+        return approval == null ? "not required/not recorded" :
+                "approved by " + safeMarkdown(approval.approvedBy()) + " at " + approval.approvedAt();
     }
 }

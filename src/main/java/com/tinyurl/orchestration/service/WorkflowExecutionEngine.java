@@ -126,6 +126,11 @@ public class WorkflowExecutionEngine {
             return TaskResult.failure(FailureClassification.POLICY,
                     "Policy denied action " + task.action());
         }
+        if (task.action() == com.tinyurl.orchestration.model.PolicyAction.MODIFY_DATABASE_SCHEMA &&
+                execution.schemaApproval() == null) {
+            return TaskResult.failure(FailureClassification.POLICY,
+                    "Schema change requires explicit approval");
+        }
         if (decision == PolicyDecision.REQUIRE_APPROVAL && execution.planApproval() == null) {
             return TaskResult.failure(FailureClassification.POLICY,
                     "Action requires an approved plan: " + task.action());

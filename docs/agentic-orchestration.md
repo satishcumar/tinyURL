@@ -59,6 +59,32 @@ Content-Type: application/json
 {"approvedBy":"satish","rationale":"Scope and risks reviewed"}
 ```
 
+Brownfield schema workflows require a second, scoped approval:
+
+```http
+POST /api/v1/workflows/{id}/schema-approval
+Content-Type: application/json
+
+{"approvedBy":"database-owner","rationale":"Recovery point and migration reviewed"}
+```
+
+If an upstream assumption changes, replan with explicit invalidation roots:
+
+```http
+POST /api/v1/workflows/{id}/replan
+Content-Type: application/json
+
+{
+  "requirement":"Replace create-drop with Flyway and preserve all data",
+  "changedTaskIds":["assess-schema"],
+  "rationale":"The deployed schema differs from the original assessment"
+}
+```
+
+The changed task and every transitive dependent are recorded as invalidated,
+the requirement version increments, prior approvals are cleared, and the new
+plan returns to `AWAITING_PLAN_APPROVAL`.
+
 Execute the approved dependency graph:
 
 ```http

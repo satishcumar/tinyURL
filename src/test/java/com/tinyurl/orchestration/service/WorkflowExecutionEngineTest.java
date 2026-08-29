@@ -129,7 +129,7 @@ class WorkflowExecutionEngineTest {
                 new RequirementAnalyzer().analyze("Add URL expiration"), graph, List.of(),
                 List.of(),
                 ExecutionMetrics.notStarted(graph.size()),
-                new ApprovalRecord("reviewer", "approved", now), now, now);
+                List.of(), new ApprovalRecord("reviewer", "approved", now), null, now, now);
     }
 
     private int taskCompletionPosition(WorkflowExecution result, String taskId) {
