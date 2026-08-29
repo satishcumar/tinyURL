@@ -33,3 +33,6 @@ and compare the output with the [sample review package](docs/examples/day1-run).
 The Day 2 brownfield scenario is defined in
 [Flyway schema ownership](orchestration/requirements/flyway-migration.md), with
 operational controls in the [migration and recovery runbook](docs/flyway-recovery.md).
+
+The ambiguous scenario is documented in
+[Privacy-preserving richer analytics](orchestration/requirements/richer-analytics.md).

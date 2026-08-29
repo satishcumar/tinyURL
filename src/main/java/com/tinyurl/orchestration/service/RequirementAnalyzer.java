@@ -13,6 +13,32 @@ public class RequirementAnalyzer {
 
     public RequirementAnalysis analyze(String requirement) {
         String normalized = requirement.trim().replaceAll("\\s+", " ");
+        boolean analyticsScenario = normalized.toLowerCase().contains("analytics");
+        if (analyticsScenario) {
+            return new RequirementAnalysis(
+                    ScenarioType.AMBIGUOUS,
+                    "Enrich URL analytics with privacy-preserving derived metrics without affecting redirect availability",
+                    List.of(
+                            new AcceptanceCriterion("AC-1", "Analytics reports link age and average redirects per active day"),
+                            new AcceptanceCriterion("AC-2", "No IP address, user agent, referrer, or visitor identifier is collected"),
+                            new AcceptanceCriterion("AC-3", "The redirect path remains independent of analytics reads"),
+                            new AcceptanceCriterion("AC-4", "Existing analytics fields remain backward compatible"),
+                            new AcceptanceCriterion("AC-5", "The clarified analytics contract requires human plan approval before execution")),
+                    List.of(
+                            "Richer means actionable aggregate metrics derived from data already stored",
+                            "An active day is a UTC 24-hour interval with a minimum denominator of one day"),
+                    List.of(
+                            "Stakeholders did not define richer analytics dimensions or retention",
+                            "Visitor-level attribution and geographic analytics are intentionally out of scope pending privacy approval"),
+                    List.of(
+                            "Derived rates may be misleading for newly created links",
+                            "Adding synchronous event collection could increase redirect latency and privacy exposure"),
+                    List.of(
+                            new RepositoryImpact("UrlAnalyticsResponse", "Add backward-compatible derived aggregate fields", "Public API compatibility"),
+                            new RepositoryImpact("UrlServiceImpl", "Calculate metrics from existing timestamps and count", "Time-boundary correctness"),
+                            new RepositoryImpact("redirect endpoint", "Keep redirect availability independent of analytics reads", "Latency regression"),
+                            new RepositoryImpact("analytics tests", "Validate privacy exclusions and deterministic calculations", "Contract drift")));
+        }
         boolean migrationScenario = normalized.toLowerCase().contains("flyway") ||
                 normalized.toLowerCase().contains("create-drop") ||
                 normalized.toLowerCase().contains("migration");
