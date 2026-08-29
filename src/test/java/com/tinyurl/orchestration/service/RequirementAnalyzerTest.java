@@ -1,0 +1,20 @@
+package com.tinyurl.orchestration.service;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class RequirementAnalyzerTest {
+    private final RequirementAnalyzer analyzer = new RequirementAnalyzer();
+
+    @Test
+    void normalizesExpirationRequirementIntoReviewableCriteria() {
+        var result = analyzer.analyze(" Add URL expiration and lifecycle management ");
+
+        assertThat(result.acceptanceCriteria()).hasSize(5);
+        assertThat(result.acceptanceCriteria()).extracting("id")
+                .containsExactly("AC-1", "AC-2", "AC-3", "AC-4", "AC-5");
+        assertThat(result.ambiguities()).isNotEmpty();
+        assertThat(result.risks()).contains("Backward compatibility of persisted records");
+    }
+}

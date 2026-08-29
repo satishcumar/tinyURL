@@ -10,6 +10,9 @@ spring:
 tinyurl:
   base-url: ${TINYURL_BASE_URL:http://localhost:8080}
 
+orchestration:
+  artifact-root: ${ORCHESTRATION_ARTIFACT_ROOT:build/orchestration-runs}
+
 management:
   endpoints:
     web:
