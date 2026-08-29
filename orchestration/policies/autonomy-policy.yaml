@@ -6,6 +6,7 @@ automatic:
   - CREATE_PLAN
   - EDIT_FEATURE_CODE
   - GENERATE_TESTS
+  - CREATE_RECOVERY_POINT
   - RUN_LOCAL_TESTS
 
 approval-required:

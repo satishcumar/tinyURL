@@ -7,14 +7,16 @@ engineering agents. Agents may analyze requirements, propose tasks, edit code,
 and generate tests; the workflow engine owns state transitions, dependency
 checks, policy decisions, approvals, and evidence persistence.
 
-The initial vertical slice implements:
+The prototype implements:
 
 1. requirement intake and normalization;
 2. acceptance criteria, assumptions, ambiguity, and risk extraction;
 3. a validated directed acyclic task graph;
 4. policy classification of automatic, approval-required, and prohibited actions;
-5. a mandatory plan approval gate;
-6. durable workflow snapshots, append-only event records, and command records.
+5. mandatory plan approval and scoped schema-change gates;
+6. dependency invalidation and requirement-versioned replanning;
+7. bounded retry, safe-stop, and compensating rollback;
+8. durable workflow snapshots, audit records, traceability, and metrics.
 
 ## State model
 
@@ -148,9 +150,11 @@ snapshot, allowing approval to resume after application restart.
 
 ## Current limitations
 
-- Requirement analysis is a deterministic URL-expiration implementation; an LLM
-  adapter will replace it while retaining the same typed output contract.
-- Dynamic replanning when requirement or design artifacts change is the next
-  orchestration increment.
+- Requirement analysis is a deterministic adapter for the three assessment
+  scenarios; an LLM adapter can replace it while retaining the typed contract.
 - The prototype uses filesystem persistence. A transactional database and
   authenticated approver identity are required for multi-instance production use.
+- Runtime task runners validate registered engineering evidence rather than
+  invoking an external coding-agent provider.
+- Final release authorization is the reviewed pull-request merge, outside the
+  orchestration API, so repository protections remain the change-control source.
