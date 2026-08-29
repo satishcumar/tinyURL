@@ -1,0 +1,26 @@
+version: 1
+
+automatic:
+  - INSPECT_REPOSITORY
+  - ANALYZE_REQUIREMENT
+  - CREATE_PLAN
+  - EDIT_FEATURE_CODE
+  - GENERATE_TESTS
+  - RUN_LOCAL_TESTS
+
+approval-required:
+  - CHANGE_PUBLIC_API
+  - MODIFY_DATABASE_SCHEMA
+  - ADD_RUNTIME_DEPENDENCY
+  - COMMIT_CHANGES
+  - PUSH_BRANCH
+  - DEPLOY
+
+prohibited:
+  - FORCE_PUSH
+  - MODIFY_PRODUCTION_DATA
+
+limits:
+  max-retries-per-stage: 3
+  max-files-changed: 15
+  max-execution-minutes: 20
