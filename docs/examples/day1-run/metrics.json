@@ -1,0 +1,15 @@
+{
+  "totalTasks": 5,
+  "successfulTasks": 5,
+  "failedTasks": 0,
+  "retryCount": 0,
+  "rollbackCount": 0,
+  "safeStopCount": 0,
+  "successRate": 1.0,
+  "retryFrequency": 0.0,
+  "rollbackFrequency": 0.0,
+  "meanTimeToRepairMillis": 0,
+  "endToEndLatencyMillis": 25,
+  "startedAt": "2026-08-29T00:00:02Z",
+  "completedAt": "2026-08-29T00:00:02.025Z"
+}
