@@ -181,6 +181,7 @@ class UrlServiceImplTest {
         UrlMapping mapping = new UrlMapping("abc1234", "https://example.com", createdAt);
         mapping.recordRedirect(accessedAt);
         when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(Instant.parse("2026-01-03T00:00:00Z"));
 
         UrlAnalyticsResponse response = service.getAnalytics("abc1234");
 
@@ -189,6 +190,23 @@ class UrlServiceImplTest {
         assertEquals(1, response.redirectCount());
         assertEquals(createdAt, response.createdAt());
         assertEquals(accessedAt, response.lastAccessedAt());
+        assertEquals(172800, response.ageSeconds());
+        assertEquals(0.5, response.averageRedirectsPerDay());
+        assertEquals("AGGREGATE_ONLY", response.dataScope());
+    }
+
+    @Test
+    void newLinkUsesOneDayFloorForStableRedirectRate() {
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        UrlMapping mapping = new UrlMapping("abc1234", "https://example.com", createdAt);
+        mapping.recordRedirect(createdAt.plusSeconds(60));
+        when(repository.findByShortCode("abc1234")).thenReturn(Optional.of(mapping));
+        when(clock.instant()).thenReturn(createdAt.plusSeconds(3600));
+
+        UrlAnalyticsResponse response = service.getAnalytics("abc1234");
+
+        assertEquals(3600, response.ageSeconds());
+        assertEquals(1.0, response.averageRedirectsPerDay());
     }
 
     @Test

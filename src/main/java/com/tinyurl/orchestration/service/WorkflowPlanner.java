@@ -20,6 +20,10 @@ public class WorkflowPlanner {
         if (analysis.scenario() == com.tinyurl.orchestration.model.ScenarioType.BROWNFIELD) {
             return migrationPlan(analysis);
         }
+        if (analysis.scenario() == com.tinyurl.orchestration.model.ScenarioType.AMBIGUOUS &&
+                analysis.normalizedRequirement().toLowerCase().contains("analytics")) {
+            return analyticsPlan(analysis);
+        }
         List<TaskNode> graph = List.of(
                 node("inspect", "Inspect API, service, persistence, and tests", List.of(),
                         List.of("AC-1", "AC-5"), PolicyAction.INSPECT_REPOSITORY),
@@ -31,6 +35,29 @@ public class WorkflowPlanner {
                         analysis.acceptanceCriteria().stream().map(c -> c.id()).toList(), PolicyAction.GENERATE_TESTS),
                 node("validate", "Run build and acceptance tests", List.of("implement", "test-design"),
                         analysis.acceptanceCriteria().stream().map(c -> c.id()).toList(), PolicyAction.RUN_LOCAL_TESTS));
+        graphValidator.validate(graph);
+        return graph;
+    }
+
+    private List<TaskNode> analyticsPlan(RequirementAnalysis analysis) {
+        List<String> allCriteria = analysis.acceptanceCriteria().stream().map(c -> c.id()).toList();
+        List<TaskNode> graph = List.of(
+                node("inspect", "Inspect analytics data flow and redirect critical path", List.of(),
+                        List.of("AC-2", "AC-3", "AC-4"), PolicyAction.INSPECT_REPOSITORY),
+                node("ambiguity-resolution", "Normalize richer analytics into a bounded measurable contract",
+                        List.of("inspect"), allCriteria, PolicyAction.CREATE_PLAN),
+                node("privacy-review", "Verify data minimization and prohibited visitor-data collection",
+                        List.of("ambiguity-resolution"), List.of("AC-2", "AC-3"), PolicyAction.INSPECT_REPOSITORY),
+                node("analytics-design", "Design backward-compatible derived aggregate fields",
+                        List.of("ambiguity-resolution"), List.of("AC-1", "AC-3", "AC-4", "AC-5"),
+                        PolicyAction.CHANGE_PUBLIC_API),
+                node("analytics-implement", "Implement privacy-preserving aggregate calculations",
+                        List.of("privacy-review", "analytics-design"), List.of("AC-1", "AC-2", "AC-4"),
+                        PolicyAction.EDIT_FEATURE_CODE),
+                node("analytics-test", "Validate calculations, privacy contract, and redirect isolation",
+                        List.of("privacy-review", "analytics-design"), allCriteria, PolicyAction.GENERATE_TESTS),
+                node("validate", "Run analytics contract and availability validation",
+                        List.of("analytics-implement", "analytics-test"), allCriteria, PolicyAction.RUN_LOCAL_TESTS));
         graphValidator.validate(graph);
         return graph;
     }

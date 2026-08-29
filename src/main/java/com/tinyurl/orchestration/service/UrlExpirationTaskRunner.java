@@ -11,16 +11,21 @@ import java.util.Map;
 
 @Component
 public class UrlExpirationTaskRunner implements TaskRunner {
-    private static final Map<String, String> EVIDENCE = Map.of(
-            "inspect", "Existing URL API, service, persistence, and tests inspected",
-            "design", "Expiration contract maps expired links to HTTP 410",
-            "implement", "Expiration lifecycle implementation is present",
-            "test-design", "Unit and integration expiration scenarios are present",
-            "assess-schema", "Entity, configuration, and schema ownership were compared",
-            "recovery-point", "Recovery procedure and preservation test were recorded",
-            "migration", "Flyway migration and Hibernate schema validation are configured",
-            "preservation-test", "Clean-schema and legacy-row migration tests are present",
-            "validate", "Expiration exception and lifecycle types are loadable");
+    private static final Map<String, String> EVIDENCE = Map.ofEntries(
+            Map.entry("ambiguity-resolution", "Richer analytics was bounded to derived aggregate metrics"),
+            Map.entry("privacy-review", "No visitor identifiers or request metadata are collected"),
+            Map.entry("analytics-design", "Analytics additions preserve existing response fields"),
+            Map.entry("analytics-implement", "Age and redirect-rate calculations use existing aggregate data"),
+            Map.entry("analytics-test", "Analytics privacy, calculation, and redirect-isolation tests are present"),
+            Map.entry("inspect", "Existing URL API, service, persistence, and tests inspected"),
+            Map.entry("design", "Expiration contract maps expired links to HTTP 410"),
+            Map.entry("implement", "Expiration lifecycle implementation is present"),
+            Map.entry("test-design", "Unit and integration expiration scenarios are present"),
+            Map.entry("assess-schema", "Entity, configuration, and schema ownership were compared"),
+            Map.entry("recovery-point", "Recovery procedure and preservation test were recorded"),
+            Map.entry("migration", "Flyway migration and Hibernate schema validation are configured"),
+            Map.entry("preservation-test", "Clean-schema and legacy-row migration tests are present"),
+            Map.entry("validate", "Scenario implementation and acceptance evidence are present"));
 
     @Override
     public TaskResult run(TaskNode task, WorkflowExecution execution) {

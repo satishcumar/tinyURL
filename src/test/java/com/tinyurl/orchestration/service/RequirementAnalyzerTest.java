@@ -29,4 +29,16 @@ class RequirementAnalyzerTest {
                 .contains("pom.xml", "application-local.yaml", "db/migration", "UrlMapping");
         assertThat(result.risks()).anyMatch(risk -> risk.contains("baselining"));
     }
+
+    @Test
+    void boundsAmbiguousAnalyticsWithPrivacyAndAvailabilityCriteria() {
+        var result = analyzer.analyze("Provide richer analytics");
+
+        assertThat(result.scenario().name()).isEqualTo("AMBIGUOUS");
+        assertThat(result.acceptanceCriteria()).hasSize(5);
+        assertThat(result.assumptions()).anyMatch(value -> value.contains("aggregate metrics"));
+        assertThat(result.ambiguities()).anyMatch(value -> value.contains("Visitor-level"));
+        assertThat(result.repositoryImpacts()).extracting("component")
+                .contains("UrlAnalyticsResponse", "UrlServiceImpl", "redirect endpoint");
+    }
 }
