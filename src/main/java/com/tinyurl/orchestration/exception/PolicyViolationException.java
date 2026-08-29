@@ -1,0 +1,7 @@
+package com.tinyurl.orchestration.exception;
+
+public class PolicyViolationException extends RuntimeException {
+    public PolicyViolationException(String message) {
+        super(message);
+    }
+}

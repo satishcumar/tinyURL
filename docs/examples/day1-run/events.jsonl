@@ -1,0 +1,4 @@
+{"executionId":"11111111-1111-1111-1111-111111111111","eventType":"PLAN_CREATED","actor":"orchestrator","timestamp":"2026-08-29T00:00:00Z","details":{"taskCount":5,"approvalRequired":true}}
+{"executionId":"11111111-1111-1111-1111-111111111111","eventType":"PLAN_APPROVED","actor":"day1-reviewer","timestamp":"2026-08-29T00:00:01Z","details":{"previousState":"AWAITING_PLAN_APPROVAL","rationale":"Acceptance criteria, task graph, and risks reviewed"}}
+{"executionId":"11111111-1111-1111-1111-111111111111","eventType":"EXECUTION_STARTED","actor":"orchestrator","timestamp":"2026-08-29T00:00:02Z","details":{"parallelismEnabled":true}}
+{"executionId":"11111111-1111-1111-1111-111111111111","eventType":"EXECUTION_FINISHED","actor":"orchestrator","timestamp":"2026-08-29T00:00:02.025Z","details":{"status":"COMPLETED","successRate":1.0,"retryCount":0,"rollbackCount":0,"safeStopCount":0}}

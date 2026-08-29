@@ -1,0 +1,160 @@
+# Agentic SDLC orchestration
+
+## Architecture
+
+The orchestration layer is a deterministic control plane around specialized
+engineering agents. Agents may analyze requirements, propose tasks, edit code,
+and generate tests; the workflow engine owns state transitions, dependency
+checks, policy decisions, approvals, and evidence persistence.
+
+The prototype implements:
+
+1. requirement intake and normalization;
+2. acceptance criteria, assumptions, ambiguity, and risk extraction;
+3. a validated directed acyclic task graph;
+4. policy classification of automatic, approval-required, and prohibited actions;
+5. mandatory plan approval and scoped schema-change gates;
+6. dependency invalidation and requirement-versioned replanning;
+7. bounded retry, safe-stop, and compensating rollback;
+8. durable workflow snapshots, audit records, traceability, and metrics.
+
+## State model
+
+`RECEIVED`, `ANALYZING`, and `PLANNING` are transient orchestration states.
+The first externally observable safe stop is `AWAITING_PLAN_APPROVAL`. Approval
+moves the workflow to `READY_FOR_EXECUTION`. Later stages use `RUNNING`,
+`VALIDATING`, `COMPLETED`, `BLOCKED`, and `SAFE_STOPPED`.
+
+Only the workflow service may transition state. Duplicate or out-of-order
+approval returns `409 Conflict`.
+
+## Dependency graph
+
+The URL-expiration scenario produces this graph:
+
+```text
+inspect -> design -> implement -----> validate
+                  \-> test-design -->/
+```
+
+`implement` and `test-design` are parallel-ready after `design`. `validate` is
+a synchronization node and cannot run until both predecessors succeed. The
+graph validator rejects duplicate identifiers, missing dependencies, and cycles.
+
+## API
+
+Create and plan a workflow:
+
+```http
+POST /api/v1/workflows
+Content-Type: application/json
+
+{"requirement":"Add URL expiration and lifecycle management"}
+```
+
+Approve the generated plan:
+
+```http
+POST /api/v1/workflows/{id}/plan-approval
+Content-Type: application/json
+
+{"approvedBy":"satish","rationale":"Scope and risks reviewed"}
+```
+
+Brownfield schema workflows require a second, scoped approval:
+
+```http
+POST /api/v1/workflows/{id}/schema-approval
+Content-Type: application/json
+
+{"approvedBy":"database-owner","rationale":"Recovery point and migration reviewed"}
+```
+
+If an upstream assumption changes, replan with explicit invalidation roots:
+
+```http
+POST /api/v1/workflows/{id}/replan
+Content-Type: application/json
+
+{
+  "requirement":"Replace create-drop with Flyway and preserve all data",
+  "changedTaskIds":["assess-schema"],
+  "rationale":"The deployed schema differs from the original assessment"
+}
+```
+
+The changed task and every transitive dependent are recorded as invalidated,
+the requirement version increments, prior approvals are cleared, and the new
+plan returns to `AWAITING_PLAN_APPROVAL`.
+
+Execute the approved dependency graph:
+
+```http
+POST /api/v1/workflows/{id}/execution
+```
+
+The endpoint runs synchronously for this prototype. The engine promotes a task
+only when all dependencies have succeeded. Independent ready tasks run in
+parallel; their downstream synchronization task remains blocked until both
+finish.
+
+Inspect state and evidence:
+
+```http
+GET /api/v1/workflows/{id}
+GET /api/v1/workflows/{id}/artifacts
+```
+
+An execution adapter records a command without storing its full output, which
+could contain credentials or personal data:
+
+```http
+POST /api/v1/workflows/{id}/commands
+Content-Type: application/json
+
+{
+  "stageId":"validate",
+  "command":"bash mvnw test",
+  "exitCode":0,
+  "startedAt":"2026-08-29T00:00:00Z",
+  "durationMillis":1200,
+  "outputDigest":"sha256:..."
+}
+```
+
+## Evidence and recovery
+
+Each run is written beneath `ORCHESTRATION_ARTIFACT_ROOT`:
+
+- `workflow.json`: atomic latest-state snapshot;
+- `events.jsonl`: append-only decisions and state events;
+- `commands.jsonl`: append-only command metadata and output digests.
+
+The workflow snapshot also contains task attempts, compensating rollback
+records, and reliability metrics: success rate, retry and rollback frequency,
+mean time to repair, safe-stop count, and end-to-end latency.
+
+## Failure controls
+
+- Transient failures are retried up to `ORCHESTRATION_MAX_ATTEMPTS` (default 3).
+- Validation, policy, and permanent failures are not blindly retried.
+- An exhausted or non-retryable failure moves the workflow to `SAFE_STOPPED`.
+- Downstream tasks become `BLOCKED` and cannot execute.
+- Successfully completed reversible changes are rolled back in reverse graph
+  order; read-only analysis and design stages are not rolled back.
+- A prohibited policy action is denied even when the plan was approved.
+
+Workflow identifiers must be UUIDs, and resolved artifact paths are constrained
+to the configured root. A workflow absent from memory is restored from its
+snapshot, allowing approval to resume after application restart.
+
+## Current limitations
+
+- Requirement analysis is a deterministic adapter for the three assessment
+  scenarios; an LLM adapter can replace it while retaining the typed contract.
+- The prototype uses filesystem persistence. A transactional database and
+  authenticated approver identity are required for multi-instance production use.
+- Runtime task runners validate registered engineering evidence rather than
+  invoking an external coding-agent provider.
+- Final release authorization is the reviewed pull-request merge, outside the
+  orchestration API, so repository protections remain the change-control source.

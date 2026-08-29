@@ -133,7 +133,11 @@ class TinyURLControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shortCode").value("abc1234"))
                 .andExpect(jsonPath("$.redirectCount").value(3))
-                .andExpect(jsonPath("$.lastAccessedAt").value("2026-01-02T00:00:00Z"));
+                .andExpect(jsonPath("$.lastAccessedAt").value("2026-01-02T00:00:00Z"))
+                .andExpect(jsonPath("$.dataScope").value("AGGREGATE_ONLY"))
+                .andExpect(jsonPath("$.ipAddress").doesNotExist())
+                .andExpect(jsonPath("$.userAgent").doesNotExist())
+                .andExpect(jsonPath("$.referrer").doesNotExist());
     }
 
     @Test

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
@@ -81,6 +82,9 @@ public class UrlServiceImpl implements UrlService {
     public UrlAnalyticsResponse getAnalytics(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
         Instant now = clock.instant();
+        long ageSeconds = Math.max(0, Duration.between(mapping.getCreatedAt(), now).getSeconds());
+        double activeDays = Math.max(1.0, ageSeconds / 86_400.0);
+        double averageRedirectsPerDay = mapping.getRedirectCount() / activeDays;
         return new UrlAnalyticsResponse(
                 mapping.getShortCode(),
                 mapping.getOriginalUrl(),
@@ -88,7 +92,10 @@ public class UrlServiceImpl implements UrlService {
                 mapping.getCreatedAt(),
                 mapping.getLastAccessedAt(),
                 mapping.getExpiresAt(),
-                mapping.isExpired(now) ? "EXPIRED" : "ACTIVE");
+                mapping.isExpired(now) ? "EXPIRED" : "ACTIVE",
+                ageSeconds,
+                averageRedirectsPerDay,
+                "AGGREGATE_ONLY");
     }
 
     private UrlMapping findByShortCode(String shortCode) {
