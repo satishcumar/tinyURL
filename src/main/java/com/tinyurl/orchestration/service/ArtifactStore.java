@@ -1,7 +1,6 @@
 package com.tinyurl.orchestration.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.tinyurl.orchestration.model.AuditEvent;
 import com.tinyurl.orchestration.model.CommandRecord;
 import com.tinyurl.orchestration.model.WorkflowExecution;
@@ -58,7 +57,7 @@ public class ArtifactStore {
         }
         try {
             return Optional.of(objectMapper.readValue(snapshot.toFile(), WorkflowExecution.class));
-        } catch (IOException exception) {
+        } catch (Exception exception) {
             throw new IllegalStateException("Unable to load workflow snapshot", exception);
         }
     }
@@ -85,7 +84,7 @@ public class ArtifactStore {
             } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             }
-        } catch (IOException exception) {
+        } catch (Exception exception) {
             throw new IllegalStateException("Unable to persist workflow artifact", exception);
         }
     }
@@ -97,9 +96,7 @@ public class ArtifactStore {
             Files.writeString(target, line, StandardCharsets.UTF_8,
                     java.nio.file.StandardOpenOption.CREATE,
                     java.nio.file.StandardOpenOption.APPEND);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Unable to serialize audit record", exception);
-        } catch (IOException exception) {
+        } catch (Exception exception) {
             throw new IllegalStateException("Unable to persist audit record", exception);
         }
     }

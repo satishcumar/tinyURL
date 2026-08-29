@@ -1,7 +1,5 @@
 package com.tinyurl.orchestration.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.tinyurl.orchestration.exception.WorkflowStateException;
 import com.tinyurl.orchestration.model.WorkflowStatus;
 import org.junit.jupiter.api.Test;
@@ -11,6 +9,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,7 +44,7 @@ class WorkflowServiceTest {
     }
 
     private WorkflowService service() {
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        ObjectMapper mapper = JsonMapper.builder().findAndAddModules().build();
         ArtifactStore store = new ArtifactStore(mapper, artifacts.toString());
         DependencyGraphValidator validator = new DependencyGraphValidator();
         return new WorkflowService(new RequirementAnalyzer(), new WorkflowPlanner(validator),
