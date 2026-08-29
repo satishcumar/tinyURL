@@ -22,5 +22,6 @@ prohibited:
 
 limits:
   max-retries-per-stage: 3
+  max-parallel-tasks: 3
   max-files-changed: 15
   max-execution-minutes: 20

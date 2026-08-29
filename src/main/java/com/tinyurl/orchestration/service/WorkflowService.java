@@ -11,6 +11,7 @@ import com.tinyurl.orchestration.model.RequirementAnalysis;
 import com.tinyurl.orchestration.model.TaskNode;
 import com.tinyurl.orchestration.model.WorkflowExecution;
 import com.tinyurl.orchestration.model.WorkflowStatus;
+import com.tinyurl.orchestration.model.ExecutionMetrics;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -27,14 +28,20 @@ public class WorkflowService {
     private final WorkflowPlanner planner;
     private final PolicyEngine policyEngine;
     private final ArtifactStore artifactStore;
+    private final WorkflowExecutionEngine executionEngine;
+    private final UrlExpirationTaskRunner taskRunner;
     private final Clock clock;
 
     public WorkflowService(RequirementAnalyzer analyzer, WorkflowPlanner planner,
-                           PolicyEngine policyEngine, ArtifactStore artifactStore, Clock clock) {
+                           PolicyEngine policyEngine, ArtifactStore artifactStore,
+                           WorkflowExecutionEngine executionEngine,
+                           UrlExpirationTaskRunner taskRunner, Clock clock) {
         this.analyzer = analyzer;
         this.planner = planner;
         this.policyEngine = policyEngine;
         this.artifactStore = artifactStore;
+        this.executionEngine = executionEngine;
+        this.taskRunner = taskRunner;
         this.clock = clock;
     }
 
@@ -48,7 +55,8 @@ public class WorkflowService {
         List<TaskNode> graph = planner.plan(analysis);
         WorkflowExecution execution = new WorkflowExecution(
                 id, requirement, 1, WorkflowStatus.AWAITING_PLAN_APPROVAL,
-                analysis, graph, null, now, now);
+                analysis, graph, List.of(), List.of(), ExecutionMetrics.notStarted(graph.size()),
+                null, now, now);
         executions.put(id, execution);
         artifactStore.saveSnapshot(execution);
         artifactStore.appendEvent(new AuditEvent(id, "PLAN_CREATED", "orchestrator", now,
@@ -63,6 +71,17 @@ public class WorkflowService {
         }
         WorkflowExecution restored = artifactStore.loadSnapshot(id)
                 .orElseThrow(() -> new WorkflowNotFoundException(id));
+        if (restored.attempts() == null || restored.rollbacks() == null || restored.metrics() == null) {
+            restored = new WorkflowExecution(restored.id(), restored.requirement(),
+                    restored.requirementVersion(), restored.status(), restored.analysis(),
+                    restored.taskGraph(),
+                    restored.attempts() == null ? List.of() : restored.attempts(),
+                    restored.rollbacks() == null ? List.of() : restored.rollbacks(),
+                    restored.metrics() == null
+                            ? ExecutionMetrics.notStarted(restored.taskGraph().size())
+                            : restored.metrics(),
+                    restored.planApproval(), restored.createdAt(), restored.updatedAt());
+        }
         executions.put(id, restored);
         return restored;
     }
@@ -85,6 +104,32 @@ public class WorkflowService {
     public List<String> artifacts(String id) {
         get(id);
         return artifactStore.listArtifacts(id);
+    }
+
+    public synchronized WorkflowExecution execute(String id) {
+        WorkflowExecution current = get(id);
+        if (current.status() != WorkflowStatus.READY_FOR_EXECUTION) {
+            throw new WorkflowStateException("Execution is not allowed from state " + current.status());
+        }
+        Instant started = clock.instant();
+        WorkflowExecution running = current.withExecution(WorkflowStatus.RUNNING,
+                current.taskGraph(), current.attempts(), current.rollbacks(), current.metrics(), started);
+        executions.put(id, running);
+        artifactStore.saveSnapshot(running);
+        artifactStore.appendEvent(new AuditEvent(id, "EXECUTION_STARTED", "orchestrator", started,
+                Map.of("parallelismEnabled", true)));
+
+        WorkflowExecution result = executionEngine.execute(running, taskRunner);
+        executions.put(id, result);
+        artifactStore.saveSnapshot(result);
+        artifactStore.appendEvent(new AuditEvent(id, "EXECUTION_FINISHED", "orchestrator",
+                result.updatedAt(), Map.of(
+                        "status", result.status().name(),
+                        "successRate", result.metrics().successRate(),
+                        "retryCount", result.metrics().retryCount(),
+                        "rollbackCount", result.metrics().rollbackCount(),
+                        "safeStopCount", result.metrics().safeStopCount())));
+        return result;
     }
 
     private void requireAutomatic(PolicyAction action) {

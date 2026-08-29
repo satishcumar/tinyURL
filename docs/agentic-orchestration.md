@@ -59,6 +59,17 @@ Content-Type: application/json
 {"approvedBy":"satish","rationale":"Scope and risks reviewed"}
 ```
 
+Execute the approved dependency graph:
+
+```http
+POST /api/v1/workflows/{id}/execution
+```
+
+The endpoint runs synchronously for this prototype. The engine promotes a task
+only when all dependencies have succeeded. Independent ready tasks run in
+parallel; their downstream synchronization task remains blocked until both
+finish.
+
 Inspect state and evidence:
 
 ```http
@@ -91,6 +102,20 @@ Each run is written beneath `ORCHESTRATION_ARTIFACT_ROOT`:
 - `events.jsonl`: append-only decisions and state events;
 - `commands.jsonl`: append-only command metadata and output digests.
 
+The workflow snapshot also contains task attempts, compensating rollback
+records, and reliability metrics: success rate, retry and rollback frequency,
+mean time to repair, safe-stop count, and end-to-end latency.
+
+## Failure controls
+
+- Transient failures are retried up to `ORCHESTRATION_MAX_ATTEMPTS` (default 3).
+- Validation, policy, and permanent failures are not blindly retried.
+- An exhausted or non-retryable failure moves the workflow to `SAFE_STOPPED`.
+- Downstream tasks become `BLOCKED` and cannot execute.
+- Successfully completed reversible changes are rolled back in reverse graph
+  order; read-only analysis and design stages are not rolled back.
+- A prohibited policy action is denied even when the plan was approved.
+
 Workflow identifiers must be UUIDs, and resolved artifact paths are constrained
 to the configured root. A workflow absent from memory is restored from its
 snapshot, allowing approval to resume after application restart.
@@ -99,7 +124,7 @@ snapshot, allowing approval to resume after application restart.
 
 - Requirement analysis is a deterministic URL-expiration implementation; an LLM
   adapter will replace it while retaining the same typed output contract.
-- Task execution, bounded retries, rollback, dynamic replanning, and reliability
-  metrics are the next orchestration increment.
+- Dynamic replanning when requirement or design artifacts change is the next
+  orchestration increment.
 - The prototype uses filesystem persistence. A transactional database and
   authenticated approver identity are required for multi-instance production use.
