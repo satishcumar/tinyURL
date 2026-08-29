@@ -14,6 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class WorkflowServiceTest {
     @TempDir
@@ -48,7 +49,8 @@ class WorkflowServiceTest {
         ArtifactStore store = new ArtifactStore(mapper, artifacts.toString());
         DependencyGraphValidator validator = new DependencyGraphValidator();
         return new WorkflowService(new RequirementAnalyzer(), new WorkflowPlanner(validator),
-                new PolicyEngine(), store,
+                new PolicyEngine(), store, mock(WorkflowExecutionEngine.class),
+                mock(UrlExpirationTaskRunner.class),
                 Clock.fixed(Instant.parse("2026-08-29T00:00:00Z"), ZoneOffset.UTC));
     }
 }

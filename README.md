@@ -20,7 +20,9 @@ bash mvnw test
 The orchestration API converts a requirement into normalized acceptance
 criteria and an explicit dependency graph, then stops at a human plan-approval
 gate. It enforces action policies and persists workflow, event, and command
-evidence.
+evidence. Approved workflows execute through a dependency-aware scheduler with
+parallel paths, bounded transient retries, compensating rollback, safe stops,
+and reliability metrics.
 
 See [Agentic SDLC orchestration](docs/agentic-orchestration.md) and the
 [URL-expiration scenario](orchestration/requirements/url-expiration.md).

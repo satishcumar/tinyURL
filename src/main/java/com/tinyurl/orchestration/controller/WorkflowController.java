@@ -52,6 +52,11 @@ public class WorkflowController {
         return ResponseEntity.accepted().build();
     }
 
+    @PostMapping("/{id}/execution")
+    public WorkflowExecution execute(@PathVariable String id) {
+        return workflowService.execute(id);
+    }
+
     @GetMapping("/{id}/artifacts")
     public List<String> artifacts(@PathVariable String id) {
         return workflowService.artifacts(id);
