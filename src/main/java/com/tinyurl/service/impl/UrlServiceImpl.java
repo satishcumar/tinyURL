@@ -19,6 +19,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 @Service
 public class UrlServiceImpl implements UrlService {
@@ -41,32 +42,28 @@ public class UrlServiceImpl implements UrlService {
         this.properties = properties;
     }
 
-    public CreateUrlResponse createShortUrl(String originalUrl) {
-        return createShortUrl(originalUrl, null);
-    }
-
-    public CreateUrlResponse createShortUrl(String originalUrl, Instant expiresAt) {
+        public CreateUrlResponse createShortUrl(String originalUrl) {
         validateUrl(originalUrl);
-        validateExpiration(expiresAt);
-
         for (int attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt++) {
-            String shortCode = shortCodeGenerator.generate();
-            if (repository.existsByShortCode(shortCode)) {
-                continue;
+                String shortCode = shortCodeGenerator.generate();
+                if (repository.existsByShortCode(shortCode)) {
+                    continue;
+                }
+                try {
+                    Instant createdAt = clock.instant();
+                    Instant expiresAt = clock.instant()
+                            .atZone(ZoneOffset.UTC)
+                            .plusMonths(1)
+                            .toInstant();
+                    UrlMapping saved = repository.saveAndFlush(
+                            new UrlMapping(shortCode, originalUrl, createdAt, expiresAt));
+                    return toCreateResponse(saved);
+                } catch (DataIntegrityViolationException exception) {
+                    // A concurrent request may have persisted the same generated code
+                    // after the existence check. Generate another candidate.
+                }
             }
-
-            try {
-                Instant createdAt = clock.instant();
-                UrlMapping saved = repository.saveAndFlush(
-                        new UrlMapping(shortCode, originalUrl, createdAt, expiresAt));
-                return toCreateResponse(saved);
-            } catch (DataIntegrityViolationException exception) {
-                // A concurrent request may have persisted the same generated code
-                // after the existence check. Generate another candidate.
-            }
-        }
-
-        throw new ShortCodeGenerationException();
+            throw new ShortCodeGenerationException();
     }
 
     @Transactional
@@ -107,12 +104,6 @@ public class UrlServiceImpl implements UrlService {
                 mapping.getCreatedAt(),
                 mapping.getExpiresAt(),
                 mapping.isExpired(clock.instant()) ? "EXPIRED" : "ACTIVE");
-    }
-
-    private void validateExpiration(Instant expiresAt) {
-        if (expiresAt != null && !expiresAt.isAfter(clock.instant())) {
-            throw new InvalidUrlException("Expiration must be in the future");
-        }
     }
 
     private void validateUrl(String value) {

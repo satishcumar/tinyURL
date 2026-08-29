@@ -26,9 +26,7 @@ public class TinyURLController {
 
     @PostMapping("/api/v1/urls")
     public ResponseEntity<CreateUrlResponse> create(@Valid @RequestBody CreateUrlRequest request) {
-        CreateUrlResponse response = request.expiresAt() == null
-                ? urlService.createShortUrl(request.url())
-                : urlService.createShortUrl(request.url(), request.expiresAt());
+        CreateUrlResponse response =urlService.createShortUrl(request.url());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

@@ -47,18 +47,7 @@ class UrlExpirationIntegrationTest {
                         .content("{\"url\":\"https://example.com\","
                                 + "\"expiresAt\":\"2099-01-01T00:00:00Z\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.expiresAt").value("2099-01-01T00:00:00Z"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
-    }
-
-    @Test
-    void rejectsExpirationThatIsNotInTheFuture() throws Exception {
-        mockMvc.perform(post("/api/v1/urls")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"url\":\"https://example.com\","
-                                + "\"expiresAt\":\"2000-01-01T00:00:00Z\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Expiration must be in the future"));
     }
 
     @Test

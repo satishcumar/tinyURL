@@ -9,8 +9,6 @@ public interface UrlService {
 
     CreateUrlResponse createShortUrl(String originalUrl);
 
-    CreateUrlResponse createShortUrl(String originalUrl, Instant expiresAt);
-
     String resolveAndRecordRedirect(String shortCode);
 
     UrlAnalyticsResponse getAnalytics(String shortCode);
