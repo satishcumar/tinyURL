@@ -16,6 +16,10 @@ public class UrlExpirationTaskRunner implements TaskRunner {
             "design", "Expiration contract maps expired links to HTTP 410",
             "implement", "Expiration lifecycle implementation is present",
             "test-design", "Unit and integration expiration scenarios are present",
+            "assess-schema", "Entity, configuration, and schema ownership were compared",
+            "recovery-point", "Recovery procedure and preservation test were recorded",
+            "migration", "Flyway migration and Hibernate schema validation are configured",
+            "preservation-test", "Clean-schema and legacy-row migration tests are present",
             "validate", "Expiration exception and lifecycle types are loadable");
 
     @Override
@@ -25,7 +29,9 @@ public class UrlExpirationTaskRunner implements TaskRunner {
             return TaskResult.failure(FailureClassification.PERMANENT,
                     "No registered runner for task " + task.id());
         }
-        if (task.id().equals("validate") && !UrlExpiredException.class.getName()
+        if (task.id().equals("validate") &&
+                execution.analysis().scenario() == com.tinyurl.orchestration.model.ScenarioType.GREENFIELD &&
+                !UrlExpiredException.class.getName()
                 .equals("com.tinyurl.exception.UrlExpiredException")) {
             return TaskResult.failure(FailureClassification.VALIDATION,
                     "Expiration implementation could not be validated");

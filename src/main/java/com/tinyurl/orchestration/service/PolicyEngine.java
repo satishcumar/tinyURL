@@ -15,6 +15,7 @@ public class PolicyEngine {
             PolicyAction.CREATE_PLAN,
             PolicyAction.EDIT_FEATURE_CODE,
             PolicyAction.GENERATE_TESTS,
+            PolicyAction.CREATE_RECOVERY_POINT,
             PolicyAction.RUN_LOCAL_TESTS);
 
     private static final EnumSet<PolicyAction> APPROVAL_REQUIRED = EnumSet.of(

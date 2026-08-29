@@ -44,13 +44,45 @@ class WorkflowServiceTest {
                 .isInstanceOf(WorkflowStateException.class);
     }
 
+    @Test
+    void requiresSeparateSchemaApprovalForBrownfieldMigration() {
+        WorkflowService service = service();
+        var execution = service.create(
+                "Replace create-drop with Flyway migrations while preserving existing data");
+
+        var planApproved = service.approvePlan(execution.id(), "architect", "Plan reviewed");
+        assertThat(planApproved.status()).isEqualTo(WorkflowStatus.AWAITING_SCHEMA_APPROVAL);
+
+        var schemaApproved = service.approveSchemaChange(
+                execution.id(), "database-owner", "Backup and migration reviewed");
+        assertThat(schemaApproved.status()).isEqualTo(WorkflowStatus.READY_FOR_EXECUTION);
+        assertThat(schemaApproved.schemaApproval().approvedBy()).isEqualTo("database-owner");
+    }
+
+    @Test
+    void replanningInvalidatesChangedTaskAndEveryDescendant() {
+        WorkflowService service = service();
+        var execution = service.create(
+                "Replace create-drop with Flyway migrations while preserving existing data");
+
+        var replanned = service.replan(execution.id(),
+                "Replace create-drop with Flyway migrations and preserve all data",
+                java.util.List.of("assess-schema"), "Schema assumption changed");
+
+        assertThat(replanned.requirementVersion()).isEqualTo(2);
+        assertThat(replanned.status()).isEqualTo(WorkflowStatus.AWAITING_PLAN_APPROVAL);
+        assertThat(replanned.replans()).singleElement().satisfies(record ->
+                assertThat(record.invalidatedTaskIds()).containsExactly(
+                        "assess-schema", "recovery-point", "migration", "preservation-test", "validate"));
+    }
+
     private WorkflowService service() {
         ObjectMapper mapper = JsonMapper.builder().findAndAddModules().build();
         ArtifactStore store = new ArtifactStore(mapper, artifacts.toString());
         DependencyGraphValidator validator = new DependencyGraphValidator();
         return new WorkflowService(new RequirementAnalyzer(), new WorkflowPlanner(validator),
                 new PolicyEngine(), store, mock(WorkflowExecutionEngine.class),
-                mock(UrlExpirationTaskRunner.class),
+                mock(UrlExpirationTaskRunner.class), new DependencyInvalidationService(),
                 Clock.fixed(Instant.parse("2026-08-29T00:00:00Z"), ZoneOffset.UTC));
     }
 }

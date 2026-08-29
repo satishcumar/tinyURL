@@ -17,6 +17,9 @@ public class WorkflowPlanner {
     }
 
     public List<TaskNode> plan(RequirementAnalysis analysis) {
+        if (analysis.scenario() == com.tinyurl.orchestration.model.ScenarioType.BROWNFIELD) {
+            return migrationPlan(analysis);
+        }
         List<TaskNode> graph = List.of(
                 node("inspect", "Inspect API, service, persistence, and tests", List.of(),
                         List.of("AC-1", "AC-5"), PolicyAction.INSPECT_REPOSITORY),
@@ -28,6 +31,25 @@ public class WorkflowPlanner {
                         analysis.acceptanceCriteria().stream().map(c -> c.id()).toList(), PolicyAction.GENERATE_TESTS),
                 node("validate", "Run build and acceptance tests", List.of("implement", "test-design"),
                         analysis.acceptanceCriteria().stream().map(c -> c.id()).toList(), PolicyAction.RUN_LOCAL_TESTS));
+        graphValidator.validate(graph);
+        return graph;
+    }
+
+    private List<TaskNode> migrationPlan(RequirementAnalysis analysis) {
+        List<String> allCriteria = analysis.acceptanceCriteria().stream().map(c -> c.id()).toList();
+        List<TaskNode> graph = List.of(
+                node("inspect", "Analyze repository schema ownership and data flow", List.of(),
+                        List.of("AC-2", "AC-3"), PolicyAction.INSPECT_REPOSITORY),
+                node("assess-schema", "Compare entity, existing schema, and target migration", List.of("inspect"),
+                        List.of("AC-1", "AC-2", "AC-3"), PolicyAction.INSPECT_REPOSITORY),
+                node("recovery-point", "Create and record a verified recovery point", List.of("assess-schema"),
+                        List.of("AC-5"), PolicyAction.CREATE_RECOVERY_POINT),
+                node("migration", "Apply versioned Flyway schema ownership", List.of("recovery-point"),
+                        List.of("AC-1", "AC-2", "AC-3", "AC-4"), PolicyAction.MODIFY_DATABASE_SCHEMA),
+                node("preservation-test", "Verify clean migration and existing-row preservation", List.of("assess-schema"),
+                        allCriteria, PolicyAction.GENERATE_TESTS),
+                node("validate", "Validate migration, ORM schema, recovery, and application tests",
+                        List.of("migration", "preservation-test"), allCriteria, PolicyAction.RUN_LOCAL_TESTS));
         graphValidator.validate(graph);
         return graph;
     }

@@ -3,6 +3,7 @@ package com.tinyurl.orchestration.controller;
 import com.tinyurl.orchestration.dto.ApprovePlanRequest;
 import com.tinyurl.orchestration.dto.CreateWorkflowRequest;
 import com.tinyurl.orchestration.dto.RecordCommandRequest;
+import com.tinyurl.orchestration.dto.ReplanWorkflowRequest;
 import com.tinyurl.orchestration.model.WorkflowExecution;
 import com.tinyurl.orchestration.service.CommandAuditService;
 import com.tinyurl.orchestration.service.WorkflowService;
@@ -52,9 +53,22 @@ public class WorkflowController {
         return ResponseEntity.accepted().build();
     }
 
+    @PostMapping("/{id}/schema-approval")
+    public WorkflowExecution approveSchemaChange(@PathVariable String id,
+                                                 @Valid @RequestBody ApprovePlanRequest request) {
+        return workflowService.approveSchemaChange(id, request.approvedBy(), request.rationale());
+    }
+
     @PostMapping("/{id}/execution")
     public WorkflowExecution execute(@PathVariable String id) {
         return workflowService.execute(id);
+    }
+
+    @PostMapping("/{id}/replan")
+    public WorkflowExecution replan(@PathVariable String id,
+                                    @Valid @RequestBody ReplanWorkflowRequest request) {
+        return workflowService.replan(id, request.requirement(), request.changedTaskIds(),
+                request.rationale());
     }
 
     @GetMapping("/{id}/artifacts")
