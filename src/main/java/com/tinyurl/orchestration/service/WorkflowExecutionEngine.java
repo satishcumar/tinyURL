@@ -13,6 +13,7 @@ import com.tinyurl.orchestration.model.WorkflowExecution;
 import com.tinyurl.orchestration.model.WorkflowStatus;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -33,6 +34,7 @@ public class WorkflowExecutionEngine {
     private final RetryPolicy retryPolicy;
     private final ExecutorService executor;
 
+    @Autowired
     public WorkflowExecutionEngine(PolicyEngine policyEngine, Clock clock,
                                    @Value("${orchestration.max-attempts:3}") int maxAttempts,
                                    @Value("${orchestration.parallelism:3}") int parallelism) {
