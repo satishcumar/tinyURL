@@ -122,6 +122,7 @@ public class WorkflowService {
         WorkflowExecution result = executionEngine.execute(running, taskRunner);
         executions.put(id, result);
         artifactStore.saveSnapshot(result);
+        artifactStore.saveOutcomeArtifacts(result);
         artifactStore.appendEvent(new AuditEvent(id, "EXECUTION_FINISHED", "orchestrator",
                 result.updatedAt(), Map.of(
                         "status", result.status().name(),

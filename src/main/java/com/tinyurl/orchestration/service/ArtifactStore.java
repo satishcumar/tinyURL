@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.tinyurl.orchestration.model.AuditEvent;
 import com.tinyurl.orchestration.model.CommandRecord;
 import com.tinyurl.orchestration.model.WorkflowExecution;
+import com.tinyurl.orchestration.model.TaskNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +37,13 @@ public class ArtifactStore {
 
     public synchronized void appendCommand(CommandRecord command) {
         appendJsonLine(executionDirectory(command.executionId()).resolve("commands.jsonl"), command);
+    }
+
+    public synchronized void saveOutcomeArtifacts(WorkflowExecution execution) {
+        Path directory = executionDirectory(execution.id());
+        writeAtomically(directory.resolve("metrics.json"), execution.metrics());
+        writeTextAtomically(directory.resolve("traceability-matrix.md"), traceability(execution));
+        writeTextAtomically(directory.resolve("engineering-summary.md"), engineeringSummary(execution));
     }
 
     public List<String> listArtifacts(String executionId) {
@@ -99,5 +107,71 @@ public class ArtifactStore {
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to persist audit record", exception);
         }
+    }
+
+    private void writeTextAtomically(Path target, String value) {
+        try {
+            Files.createDirectories(target.getParent());
+            Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+            Files.writeString(temporary, value, StandardCharsets.UTF_8);
+            try {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to persist outcome document", exception);
+        }
+    }
+
+    private String traceability(WorkflowExecution execution) {
+        StringBuilder document = new StringBuilder("# Acceptance-criteria traceability\n\n")
+                .append("| Criterion | Requirement | Tasks | Evidence status |\n")
+                .append("|---|---|---|---|\n");
+        execution.analysis().acceptanceCriteria().forEach(criterion -> {
+            List<TaskNode> tasks = execution.taskGraph().stream()
+                    .filter(task -> task.acceptanceCriteria().contains(criterion.id())).toList();
+            String taskIds = tasks.stream().map(TaskNode::id)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            boolean passed = !tasks.isEmpty() && tasks.stream()
+                    .allMatch(task -> task.status() == com.tinyurl.orchestration.model.TaskStatus.SUCCEEDED);
+            document.append("| ").append(criterion.id()).append(" | ")
+                    .append(safeMarkdown(criterion.description())).append(" | ")
+                    .append(taskIds).append(" | ").append(passed ? "PASS" : "NOT VERIFIED")
+                    .append(" |\n");
+        });
+        return document.toString();
+    }
+
+    private String engineeringSummary(WorkflowExecution execution) {
+        return "# Engineering outcome\n\n" +
+                "- Execution: `" + execution.id() + "`\n" +
+                "- Requirement version: " + execution.requirementVersion() + "\n" +
+                "- Final status: `" + execution.status() + "`\n" +
+                "- Tasks passed: " + execution.metrics().successfulTasks() + "/" +
+                execution.metrics().totalTasks() + "\n" +
+                "- Retries: " + execution.metrics().retryCount() + "\n" +
+                "- Rollbacks: " + execution.metrics().rollbackCount() + "\n" +
+                "- End-to-end latency (ms): " + execution.metrics().endToEndLatencyMillis() + "\n\n" +
+                "## Rationale\n\n" + execution.analysis().normalizedRequirement() + "\n\n" +
+                "## Assumptions\n\n" + markdownList(execution.analysis().assumptions()) +
+                "\n## Risks\n\n" + markdownList(execution.analysis().risks()) +
+                "\n## Limitations\n\n" +
+                "- Requirement analysis uses a deterministic prototype adapter.\n" +
+                "- Execution is synchronous and filesystem-backed.\n" +
+                "- Approver identity is asserted by the caller and is not authenticated.\n";
+    }
+
+    private String markdownList(List<String> values) {
+        if (values.isEmpty()) {
+            return "- None recorded.\n";
+        }
+        return values.stream().map(value -> "- " + safeMarkdown(value) + "\n")
+                .collect(java.util.stream.Collectors.joining());
+    }
+
+    private String safeMarkdown(String value) {
+        return value.replace("|", "\\|").replace("\r", " ").replace("\n", " ");
     }
 }

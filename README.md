@@ -26,3 +26,6 @@ and reliability metrics.
 
 See [Agentic SDLC orchestration](docs/agentic-orchestration.md) and the
 [URL-expiration scenario](orchestration/requirements/url-expiration.md).
+
+For the assessment walkthrough, use the [Day 1 demonstration](docs/day1-demo.md)
+and compare the output with the [sample review package](docs/examples/day1-run).
