@@ -36,3 +36,6 @@ operational controls in the [migration and recovery runbook](docs/flyway-recover
 
 The ambiguous scenario is documented in
 [Privacy-preserving richer analytics](orchestration/requirements/richer-analytics.md).
+
+For the complete assessment walkthrough, architecture, release gates, evidence,
+and final limitations, see the [final assessment package](docs/final-assessment.md).
