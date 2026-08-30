@@ -1,2 +1,0 @@
-{"executionId":"11111111-1111-1111-1111-111111111111","stageId":"inspect","command":"rg --files src/main src/test","exitCode":0,"startedAt":"2026-08-29T00:00:00Z","duration":"PT0.012S","outputDigest":"sha256:day1-evidence"}
-{"executionId":"11111111-1111-1111-1111-111111111111","stageId":"validate","command":"bash mvnw clean verify","exitCode":0,"startedAt":"2026-08-29T00:00:03Z","duration":"PT12.5S","outputDigest":"sha256:ci-run-evidence"}
