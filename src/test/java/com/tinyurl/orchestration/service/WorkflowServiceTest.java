@@ -28,7 +28,13 @@ class WorkflowServiceTest {
 
         assertThat(execution.status()).isEqualTo(WorkflowStatus.AWAITING_PLAN_APPROVAL);
         assertThat(execution.taskGraph()).hasSize(5);
-        assertThat(service.artifacts(execution.id())).contains("workflow.json", "events.jsonl");
+        assertThat(service.artifacts(execution.id())).contains(
+                "workflow.json", "events.jsonl", "requirement.md",
+                "normalized-requirement.json", "acceptance-criteria.json",
+                "dependency-graph.json", "plan.md", "approvals.json", "decisions.json",
+                "command-audit.jsonl", "changed-files.json", "test-results.json",
+                "traceability-matrix.md", "risk-report.md", "metrics.json",
+                "engineering-summary.md");
     }
 
     @Test

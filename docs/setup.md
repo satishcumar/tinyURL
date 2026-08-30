@@ -121,8 +121,11 @@ Each run is retained under:
 build/orchestration-runs/<executionId>/
 ```
 
-Review the workflow snapshot, append-only events, decision and command records,
-traceability matrix, metrics, and engineering summary. Retain these directories
+Review the original and normalized requirements, acceptance criteria, dependency
+graph, plan, approvals, decisions, command audit, impact-based changed-files
+report, validation results, traceability matrix, risk report, metrics, and
+engineering summary. The package also retains `workflow.json`, `events.jsonl`,
+and `commands.jsonl` for recovery and backward compatibility. Retain these directories
 for the presentation because they demonstrate requirement lineage, approvals,
 execution, validation, retries or rollback records, and release evidence.
 
