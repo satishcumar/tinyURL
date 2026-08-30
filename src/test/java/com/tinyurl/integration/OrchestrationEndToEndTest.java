@@ -81,6 +81,10 @@ class OrchestrationEndToEndTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").value(hasItems(
                         "workflow.json", "events.jsonl", "commands.jsonl", "metrics.json",
+                        "requirement.md", "normalized-requirement.json",
+                        "acceptance-criteria.json", "dependency-graph.json", "plan.md",
+                        "approvals.json", "decisions.json", "command-audit.jsonl",
+                        "changed-files.json", "test-results.json", "risk-report.md",
                         "traceability-matrix.md", "engineering-summary.md")));
     }
 }

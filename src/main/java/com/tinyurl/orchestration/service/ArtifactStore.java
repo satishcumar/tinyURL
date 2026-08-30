@@ -14,7 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
 public class ArtifactStore {
@@ -28,7 +31,9 @@ public class ArtifactStore {
     }
 
     public synchronized void saveSnapshot(WorkflowExecution execution) {
-        writeAtomically(executionDirectory(execution.id()).resolve("workflow.json"), execution);
+        Path directory = executionDirectory(execution.id());
+        writeAtomically(directory.resolve("workflow.json"), execution);
+        writeReviewPackage(execution, directory);
     }
 
     public synchronized void appendEvent(AuditEvent event) {
@@ -37,13 +42,132 @@ public class ArtifactStore {
 
     public synchronized void appendCommand(CommandRecord command) {
         appendJsonLine(executionDirectory(command.executionId()).resolve("commands.jsonl"), command);
+        appendJsonLine(executionDirectory(command.executionId()).resolve("command-audit.jsonl"), command);
     }
 
     public synchronized void saveOutcomeArtifacts(WorkflowExecution execution) {
         Path directory = executionDirectory(execution.id());
+        writeReviewPackage(execution, directory);
         writeAtomically(directory.resolve("metrics.json"), execution.metrics());
         writeTextAtomically(directory.resolve("traceability-matrix.md"), traceability(execution));
         writeTextAtomically(directory.resolve("engineering-summary.md"), engineeringSummary(execution));
+    }
+
+    private void writeReviewPackage(WorkflowExecution execution, Path directory) {
+        writeTextAtomically(directory.resolve("requirement.md"), requirementDocument(execution));
+        writeAtomically(directory.resolve("normalized-requirement.json"), Map.of(
+                "executionId", execution.id(),
+                "requirementVersion", execution.requirementVersion(),
+                "scenario", execution.analysis().scenario(),
+                "normalizedRequirement", execution.analysis().normalizedRequirement(),
+                "assumptions", execution.analysis().assumptions(),
+                "ambiguities", execution.analysis().ambiguities()));
+        writeAtomically(directory.resolve("acceptance-criteria.json"),
+                execution.analysis().acceptanceCriteria());
+        writeAtomically(directory.resolve("dependency-graph.json"), dependencyGraph(execution));
+        writeTextAtomically(directory.resolve("plan.md"), planDocument(execution));
+        writeAtomically(directory.resolve("approvals.json"), approvals(execution));
+        writeAtomically(directory.resolve("decisions.json"), decisions(execution));
+        ensureFile(directory.resolve("command-audit.jsonl"));
+        writeAtomically(directory.resolve("changed-files.json"), changedFiles(execution));
+        writeAtomically(directory.resolve("test-results.json"), testResults(execution));
+        writeTextAtomically(directory.resolve("risk-report.md"), riskReport(execution));
+        writeAtomically(directory.resolve("metrics.json"), execution.metrics());
+        writeTextAtomically(directory.resolve("traceability-matrix.md"), traceability(execution));
+        writeTextAtomically(directory.resolve("engineering-summary.md"), engineeringSummary(execution));
+    }
+
+    private Map<String, Object> dependencyGraph(WorkflowExecution execution) {
+        List<Map<String, String>> edges = execution.taskGraph().stream()
+                .flatMap(task -> task.dependsOn().stream().map(dependency ->
+                        Map.of("from", dependency, "to", task.id())))
+                .toList();
+        return Map.of("nodes", execution.taskGraph(), "edges", edges);
+    }
+
+    private Map<String, Object> approvals(WorkflowExecution execution) {
+        Map<String, Object> approvals = new LinkedHashMap<>();
+        approvals.put("planApproval", execution.planApproval());
+        approvals.put("schemaApproval", execution.schemaApproval());
+        approvals.put("currentStatus", execution.status());
+        return approvals;
+    }
+
+    private Map<String, Object> decisions(WorkflowExecution execution) {
+        return Map.of(
+                "requirementVersion", execution.requirementVersion(),
+                "scenarioSelection", execution.analysis().scenario(),
+                "replans", execution.replans(),
+                "rollbacks", execution.rollbacks(),
+                "decisionLineageNote", "Approval and state-transition details are retained in events.jsonl");
+    }
+
+    private Map<String, Object> changedFiles(WorkflowExecution execution) {
+        return Map.of(
+                "captureMode", "repository-impact-analysis",
+                "actualGitDiffCaptured", false,
+                "limitations", "The deterministic prototype does not mutate a checked-out repository; declared impacts are reported instead of claiming an observed Git diff.",
+                "declaredImpacts", execution.analysis().repositoryImpacts());
+    }
+
+    private Map<String, Object> testResults(WorkflowExecution execution) {
+        Set<String> validationTasks = execution.taskGraph().stream()
+                .filter(task -> task.action() == com.tinyurl.orchestration.model.PolicyAction.GENERATE_TESTS
+                        || task.action() == com.tinyurl.orchestration.model.PolicyAction.RUN_LOCAL_TESTS)
+                .map(TaskNode::id).collect(java.util.stream.Collectors.toSet());
+        List<com.tinyurl.orchestration.model.TaskAttempt> attempts = execution.attempts().stream()
+                .filter(attempt -> validationTasks.contains(attempt.taskId())).toList();
+        return Map.of(
+                "captureMode", "orchestration-task-attempts",
+                "externalReportParsed", false,
+                "status", execution.status(),
+                "validationTaskIds", validationTasks,
+                "attempts", attempts);
+    }
+
+    private String requirementDocument(WorkflowExecution execution) {
+        return "# Requirement\n\n" + safeMarkdown(execution.requirement()) + "\n\n" +
+                "- Execution: `" + execution.id() + "`\n" +
+                "- Version: " + execution.requirementVersion() + "\n" +
+                "- Scenario: `" + execution.analysis().scenario() + "`\n";
+    }
+
+    private String planDocument(WorkflowExecution execution) {
+        StringBuilder document = new StringBuilder("# Execution plan\n\n")
+                .append("- Status: `").append(execution.status()).append("`\n")
+                .append("- Requirement version: ").append(execution.requirementVersion()).append("\n\n")
+                .append("| Task | Purpose | Dependencies | Policy action | Status |\n")
+                .append("|---|---|---|---|---|\n");
+        execution.taskGraph().forEach(task -> document.append("| `").append(task.id()).append("` | ")
+                .append(safeMarkdown(task.name())).append(" | ")
+                .append(task.dependsOn().isEmpty() ? "None" : String.join(", ", task.dependsOn()))
+                .append(" | `").append(task.action()).append("` | `")
+                .append(task.status()).append("` |\n"));
+        return document.toString();
+    }
+
+    private String riskReport(WorkflowExecution execution) {
+        return "# Risk report\n\n## Identified risks\n\n" +
+                markdownList(execution.analysis().risks()) +
+                "\n## Ambiguities\n\n" + markdownList(execution.analysis().ambiguities()) +
+                "\n## Repository impact risks\n\n" + execution.analysis().repositoryImpacts().stream()
+                .map(impact -> "- **" + safeMarkdown(impact.component()) + "**: " +
+                        safeMarkdown(impact.risk()) + " — " + safeMarkdown(impact.impact()) + "\n")
+                .collect(java.util.stream.Collectors.joining()) +
+                "\n## Recovery evidence\n\n- Rollback records: " + execution.rollbacks().size() +
+                "\n- Safe stops: " + execution.metrics().safeStopCount() +
+                "\n- Retries: " + execution.metrics().retryCount() + "\n";
+    }
+
+    private void ensureFile(Path target) {
+        try {
+            Files.createDirectories(target.getParent());
+            if (!Files.exists(target)) {
+                Files.createFile(target);
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to initialize audit artifact", exception);
+        }
     }
 
     public List<String> listArtifacts(String executionId) {
