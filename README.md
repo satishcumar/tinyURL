@@ -5,6 +5,9 @@ stateful agentic SDLC orchestration prototype.
 
 ## Run
 
+For prerequisites, clean setup, local verification, Windows/Python guidance,
+and the full three-scenario demonstration, see the [setup guide](docs/setup.md).
+
 ```bash
 bash mvnw spring-boot:run
 ```
