@@ -23,6 +23,11 @@ boundaries; humans approve plans, schema changes, and the final pull-request mer
 
 ## Demonstration
 
+The [three-scenario engineering walkthrough](three-scenario-walkthrough.md)
+provides the normalized requirement, repository impact, actual dependency graph,
+approval gates, validation evidence, recovery behavior, and limitations for the
+greenfield, brownfield, and ambiguous scenarios.
+
 1. Run `bash mvnw clean verify`.
 2. Start the service with `bash mvnw spring-boot:run`.
 3. In another terminal run `./scripts/demo-all-scenarios.sh`.
@@ -61,5 +66,5 @@ transactional workflow storage, authenticated role-based approvals, distributed
 locking, secret management, telemetry export, signed artifacts, and protected
 environment deployment controls.
 
-See [architecture](architecture-overview.md), [release readiness](release-readiness.md),
-and [orchestration details](agentic-orchestration.md).
+See [architecture](architecture-overview.md), [three-scenario walkthrough](three-scenario-walkthrough.md),
+[release readiness](release-readiness.md), and [orchestration details](agentic-orchestration.md).
