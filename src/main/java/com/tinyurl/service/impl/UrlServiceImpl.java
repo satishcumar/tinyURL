@@ -8,6 +8,7 @@ import com.tinyurl.dto.UrlAnalyticsResponse;
 import com.tinyurl.exception.InvalidUrlException;
 import com.tinyurl.exception.ShortCodeGenerationException;
 import com.tinyurl.exception.UrlNotFoundException;
+import com.tinyurl.exception.UrlExpiredException;
 import com.tinyurl.service.UrlService;
 import com.tinyurl.util.ShortCodeGenerator;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 @Service
 public class UrlServiceImpl implements UrlService {
@@ -40,45 +43,59 @@ public class UrlServiceImpl implements UrlService {
         this.properties = properties;
     }
 
-    public CreateUrlResponse createShortUrl(String originalUrl) {
+        public CreateUrlResponse createShortUrl(String originalUrl) {
         validateUrl(originalUrl);
-
         for (int attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt++) {
-            String shortCode = shortCodeGenerator.generate();
-            if (repository.existsByShortCode(shortCode)) {
-                continue;
+                String shortCode = shortCodeGenerator.generate();
+                if (repository.existsByShortCode(shortCode)) {
+                    continue;
+                }
+                try {
+                    Instant createdAt = clock.instant();
+                    Instant expiresAt = clock.instant()
+                            .atZone(ZoneOffset.UTC)
+                            .plusMonths(1)
+                            .toInstant();
+                    UrlMapping saved = repository.saveAndFlush(
+                            new UrlMapping(shortCode, originalUrl, createdAt, expiresAt));
+                    return toCreateResponse(saved);
+                } catch (DataIntegrityViolationException exception) {
+                    // A concurrent request may have persisted the same generated code
+                    // after the existence check. Generate another candidate.
+                }
             }
-
-            try {
-                Instant createdAt = clock.instant();
-                UrlMapping saved = repository.saveAndFlush(
-                        new UrlMapping(shortCode, originalUrl, createdAt));
-                return toCreateResponse(saved);
-            } catch (DataIntegrityViolationException exception) {
-                // A concurrent request may have persisted the same generated code
-                // after the existence check. Generate another candidate.
-            }
-        }
-
-        throw new ShortCodeGenerationException();
+            throw new ShortCodeGenerationException();
     }
 
     @Transactional
     public String resolveAndRecordRedirect(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
-        repository.recordRedirect(shortCode, clock.instant());
+        Instant now = clock.instant();
+        if (mapping.isExpired(now)) {
+            throw new UrlExpiredException(shortCode);
+        }
+        repository.recordRedirect(shortCode, now);
         return mapping.getOriginalUrl();
     }
 
     @Transactional(readOnly = true)
     public UrlAnalyticsResponse getAnalytics(String shortCode) {
         UrlMapping mapping = findByShortCode(shortCode);
+        Instant now = clock.instant();
+        long ageSeconds = Math.max(0, Duration.between(mapping.getCreatedAt(), now).getSeconds());
+        double activeDays = Math.max(1.0, ageSeconds / 86_400.0);
+        double averageRedirectsPerDay = mapping.getRedirectCount() / activeDays;
         return new UrlAnalyticsResponse(
                 mapping.getShortCode(),
                 mapping.getOriginalUrl(),
                 mapping.getRedirectCount(),
                 mapping.getCreatedAt(),
-                mapping.getLastAccessedAt());
+                mapping.getLastAccessedAt(),
+                mapping.getExpiresAt(),
+                mapping.isExpired(now) ? "EXPIRED" : "ACTIVE",
+                ageSeconds,
+                averageRedirectsPerDay,
+                "AGGREGATE_ONLY");
     }
 
     private UrlMapping findByShortCode(String shortCode) {
@@ -91,7 +108,9 @@ public class UrlServiceImpl implements UrlService {
                 mapping.getShortCode(),
                 properties.getBaseUrl() + "/" + mapping.getShortCode(),
                 mapping.getOriginalUrl(),
-                mapping.getCreatedAt());
+                mapping.getCreatedAt(),
+                mapping.getExpiresAt(),
+                mapping.isExpired(clock.instant()) ? "EXPIRED" : "ACTIVE");
     }
 
     private void validateUrl(String value) {

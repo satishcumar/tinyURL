@@ -10,6 +10,11 @@ spring:
 tinyurl:
   base-url: ${TINYURL_BASE_URL:http://localhost:8080}
 
+orchestration:
+  artifact-root: ${ORCHESTRATION_ARTIFACT_ROOT:build/orchestration-runs}
+  max-attempts: ${ORCHESTRATION_MAX_ATTEMPTS:3}
+  parallelism: ${ORCHESTRATION_PARALLELISM:3}
+
 management:
   endpoints:
     web:
