@@ -30,10 +30,10 @@ and reliability metrics.
 See [Agentic SDLC orchestration](docs/agentic-orchestration.md) and the
 [URL-expiration scenario](orchestration/requirements/url-expiration.md).
 
-For the assessment walkthrough, use the [Day 1 demonstration](docs/day1-demo.md)
-and compare the output with the [sample review package](docs/examples/day1-run).
+The greenfield scenario is defined in
+[URL Expiration](orchestration/requirements/url-expiration.md)
 
-The Day 2 brownfield scenario is defined in
+The brownfield scenario is defined in
 [Flyway schema ownership](orchestration/requirements/flyway-migration.md), with
 operational controls in the [migration and recovery runbook](docs/flyway-recovery.md).
 
